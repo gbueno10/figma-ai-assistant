@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>AI Design Assistant</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            margin: 0;
+            padding: 16px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            margin: 0 0 16px 0;
+            font-size: 18px;
+            color: #333;
+        }
+        
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 12px;
+        }
+        
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .status.success {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 8px;
+            border: none;
+            border-radius: 6px;
+            background: #1976d2;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #1565c0;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+        
+        .secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .json-output {
+            margin-top: 16px;
+            display: none;
+        }
+        
+        .json-content {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .stats {
+            background: #fafafa;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 AI Design Assistant</h1>
+        
+        <div id="status" class="status info">
+            Selecione um frame e clique em Analisar
+        </div>
+        
+        <button id="analyzeBtn">📸 Analisar Design</button>
+        <button id="exportBtn" class="secondary">📄 Exportar JSON</button>
+        <button id="closeBtn" class="secondary">❌ Fechar</button>
+        
+        <div id="jsonOutput" class="json-output">
+            <h3>📊 Resultado da Análise</h3>
+            <div id="stats" class="stats"></div>
+            <pre id="jsonContent" class="json-content"></pre>
+        </div>
+    </div>
+
+    <script>
+        console.log('UI carregada');
+        
+        // Elementos da UI
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const closeBtn = document.getElementById('closeBtn');
+        const status = document.getElementById('status');
+        const jsonOutput = document.getElementById('jsonOutput');
+        const jsonContent = document.getElementById('jsonContent');
+        const stats = document.getElementById('stats');
+        
+        let currentData = null;
+        
+        // Função para atualizar status
+        function updateStatus(message, type = 'info') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        // Event Listeners
+        analyzeBtn.addEventListener('click', function() {
+            console.log('Botão analisar clicado');
+            updateStatus('🔄 Analisando...', 'info');
+            analyzeBtn.disabled = true;
+            
+            parent.postMessage({
+                pluginMessage: { type: 'capture-and-analyze' }
+            }, '*');
+        });
+        
+        exportBtn.addEventListener('click', function() {
+            console.log('Botão exportar clicado');
+            if (currentData) {
+                navigator.clipboard.writeText(JSON.stringify(currentData, null, 2))
+                    .then(() => updateStatus('📋 JSON copiado!', 'success'))
+                    .catch(() => updateStatus('❌ Erro ao copiar', 'error'));
+            } else {
+                parent.postMessage({
+                    pluginMessage: { type: 'export-json' }
+                }, '*');
+            }
+        });
+        
+        closeBtn.addEventListener('click', function() {
+            console.log('Botão fechar clicado');
+            parent.postMessage({
+                pluginMessage: { type: 'cancel' }
+            }, '*');
+        });
+        
+        // Escutar mensagens do plugin
+        window.onmessage = function(event) {
+            const msg = event.data.pluginMessage;
+            console.log('Mensagem recebida:', msg);
+            
+            if (msg.type === 'analysis-complete') {
+                console.log('Análise completa recebida');
+                currentData = msg.structuredData;
+                
+                // Atualizar UI
+                updateStatus('✅ Análise concluída!', 'success');
+                analyzeBtn.disabled = false;
+                
+                // Mostrar estatísticas
+                const summary = msg.structuredData.summary;
+                stats.innerHTML = `
+                    <strong>Elementos:</strong> ${summary.totalElements} | 
+                    <strong>Textos:</strong> ${summary.elementTypes.text} | 
+                    <strong>Botões:</strong> ${summary.elementTypes.buttons} |
+                    <strong>Complexidade:</strong> ${summary.complexity}
+                `;
+                
+                // Mostrar JSON
+                jsonContent.textContent = JSON.stringify(msg.structuredData, null, 2);
+                jsonOutput.style.display = 'block';
+                
+            } else if (msg.type === 'error') {
+                console.log('Erro recebido:', msg.message);
+                updateStatus(`❌ ${msg.message}`, 'error');
+                analyzeBtn.disabled = false;
+                
+            } else if (msg.type === 'frame-selected') {
+                updateStatus(`📋 Frame: ${msg.frameName} (${msg.elementCount} elementos)`, 'info');
+                
+            } else if (msg.type === 'json-exported') {
+                currentData = msg.data;
+                jsonContent.textContent = JSON.stringify(msg.data, null, 2);
+                jsonOutput.style.display = 'block';
+                updateStatus('📄 JSON exportado!', 'success');
+            }
+        };
+        
+        console.log('Event listeners configurados');
+    </script>
+</body>
+</html>

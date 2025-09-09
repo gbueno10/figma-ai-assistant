@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>AI Design Assistant</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      padding: 20px;
+      min-height: 100vh;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      overflow: hidden;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    
+    .subtitle {
+      font-size: 12px;
+      opacity: 0.9;
+      line-height: 1.4;
+    }
+    
+    .content {
+      padding: 20px;
+    }
+    
+    .status-card {
+      background: #f8f9fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    
+    .status-card.visible {
+      display: block;
+    }
+    
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .status-row:last-child {
+      margin-bottom: 0;
+    }
+    
+    .status-label {
+      font-size: 11px;
+      color: #666;
+      font-weight: 500;
+    }
+    
+    .status-value {
+      font-size: 11px;
+      color: #1a1a1a;
+      font-weight: 600;
+    }
+    
+    .screenshot-preview {
+      background: #f8f9fa;
+      border: 2px dashed #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 16px;
+      display: none;
+      min-height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .screenshot-preview.visible {
+      display: flex;
+    }
+    
+    .screenshot-img {
+      max-width: 100%;
+      max-height: 100px;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .placeholder-text {
+      color: #666;
+      font-size: 11px;
+    }
+    
+    .analysis-results {
+      display: none;
+    }
+    
+    .analysis-results.visible {
+      display: block;
+    }
+    
+    .suggestion-card {
+      background: white;
+      border: 1px solid #e1e4e8;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .suggestion-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .suggestion-type {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 10px;
+      text-transform: uppercase;
+    }
+    
+    .suggestion-type.text { background: #e3f2fd; color: #1976d2; }
+    .suggestion-type.layout { background: #f3e5f5; color: #7b1fa2; }
+    .suggestion-type.style { background: #e8f5e8; color: #388e3c; }
+    .suggestion-type.structure { background: #fff3e0; color: #f57c00; }
+    
+    .confidence {
+      font-size: 10px;
+      color: #666;
+      font-weight: 500;
+    }
+    
+    .suggestion-content {
+      font-size: 11px;
+      line-height: 1.4;
+      margin-bottom: 8px;
+    }
+    
+    .suggestion-reasoning {
+      font-size: 10px;
+      color: #666;
+      font-style: italic;
+      border-left: 2px solid #ddd;
+      padding-left: 8px;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 20px;
+    }
+    
+    .button {
+      flex: 1;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    
+    .button-primary {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+    }
+    
+    .button-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);
+    }
+    
+    .button-secondary {
+      background: #f8f9fa;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+    
+    .button-secondary:hover {
+      background: #e9ecef;
+    }
+    
+    .loading {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .emoji {
+      font-size: 14px;
+    }
+    
+    .instructions {
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 11px;
+      color: #856404;
+      line-height: 1.4;
+      margin-bottom: 16px;
+    }
+    
+    .instructions.hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">🤖 AI Design Assistant</div>
+      <div class="subtitle">Análise inteligente do seu design com IA</div>
+    </div>
+    
+    <div class="content">
+      <div id="instructions" class="instructions">
+        <strong>📋 Como funciona:</strong><br>
+        1. Selecione um frame no Figma<br>
+        2. Clique em "Analisar Design"<br>
+        3. Receba sugestões da IA para melhorar<br>
+        4. Aplique as mudanças que desejar!
+      </div>
+      
+      <div id="status-card" class="status-card">
+        <div class="status-row">
+          <span class="status-label">Frame selecionado:</span>
+          <span id="frame-name" class="status-value">-</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Elementos encontrados:</span>
+          <span id="element-count" class="status-value">0</span>
+        </div>
+      </div>
+      
+      <div id="screenshot-preview" class="screenshot-preview">
+        <div class="placeholder-text">
+          📸 Screenshot será exibido aqui após análise
+        </div>
+      </div>
+      
+      <div id="analysis-results" class="analysis-results">
+        <div id="suggestions-container">
+          <!-- Sugestões serão inseridas aqui dinamicamente -->
+        </div>
+      </div>
+      
+      <div class="button-group">
+        <button id="cancel-btn" class="button button-secondary">
+          <span class="emoji">❌</span>
+          Cancelar
+        </button>
+        <button id="analyze-btn" class="button button-primary">
+          <span class="emoji">🔍</span>
+          Analisar Design
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Elementos DOM
+    const instructions = document.getElementById('instructions');
+    const statusCard = document.getElementById('status-card');
+    const screenshotPreview = document.getElementById('screenshot-preview');
+    const analysisResults = document.getElementById('analysis-results');
+    const suggestionsContainer = document.getElementById('suggestions-container');
+    const frameNameEl = document.getElementById('frame-name');
+    const elementCountEl = document.getElementById('element-count');
+    const analyzeBtn = document.getElementById('analyze-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    
+    let currentScreenshot = null;
+    let currentAnalysis = null;
+    
+    // Event listeners
+    analyzeBtn.addEventListener('click', () => {
+      analyzeBtn.disabled = true;
+      analyzeBtn.innerHTML = '<span class="loading"></span> Analisando...';
+      
+      parent.postMessage({ pluginMessage: { type: 'capture-and-analyze' } }, '*');
+    });
+    
+    cancelBtn.addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
+    });
+    
+    // Função para renderizar sugestões
+    function renderSuggestions(suggestions) {
+      suggestionsContainer.innerHTML = '';
+      
+      if (suggestions.length === 0) {
+        suggestionsContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Nenhuma sugestão encontrada</div>';
+        return;
+      }
+      
+      suggestions.forEach((suggestion, index) => {
+        const card = document.createElement('div');
+        card.className = 'suggestion-card';
+        
+        card.innerHTML = `
+          <div class="suggestion-header">
+            <span class="suggestion-type ${suggestion.type}">${suggestion.type}</span>
+            <span class="confidence">${Math.round(suggestion.confidence * 100)}% confiança</span>
+          </div>
+          <div class="suggestion-content">
+            <strong>${suggestion.elementName || 'Elemento'}</strong><br>
+            ${suggestion.currentValue ? `<del>${suggestion.currentValue}</del> → ` : ''}
+            <strong>${suggestion.suggestedValue}</strong>
+          </div>
+          <div class="suggestion-reasoning">
+            💡 ${suggestion.reasoning}
+          </div>
+        `;
+        
+        suggestionsContainer.appendChild(card);
+      });
+    }
+    
+    // Escuta mensagens do plugin
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      
+      if (msg.type === 'frame-selected') {
+        // Mostra informações do frame selecionado
+        frameNameEl.textContent = msg.frameName;
+        elementCountEl.textContent = msg.elementCount;
+        statusCard.classList.add('visible');
+        
+      } else if (msg.type === 'analysis-complete') {
+        // Análise concluída
+        analyzeBtn.disabled = false;
+        analyzeBtn.innerHTML = '<span class="emoji">🔍</span> Analisar Design';
+        
+        // Mostra screenshot
+        currentScreenshot = msg.screenshot;
+        if (currentScreenshot) {
+          screenshotPreview.innerHTML = `<img src="${currentScreenshot}" alt="Screenshot" class="screenshot-img">`;
+          screenshotPreview.classList.add('visible');
+        }
+        
+        // Mostra resultados
+        currentAnalysis = msg.aiResponse;
+        if (currentAnalysis && currentAnalysis.suggestions) {
+          renderSuggestions(currentAnalysis.suggestions);
+          analysisResults.classList.add('visible');
+          instructions.classList.add('hidden');
+        }
+        
+      } else if (msg.type === 'no-frame-selected') {
+        // Nenhum frame selecionado
+        statusCard.classList.remove('visible');
+        screenshotPreview.classList.remove('visible');
+        analysisResults.classList.remove('visible');
+        instructions.classList.remove('hidden');
+      }
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+{
+  "design": {
+    "id": "frame_123456",
+    "name": "Landing Page Header",
+    "dimensions": {
+      "width": 1200,
+      "height": 800
+    },
+    "timestamp": "2025-09-09T15:30:00.000Z"
+  },
+  "summary": {
+    "totalElements": 15,
+    "elementTypes": {
+      "text": 5,
+      "buttons": 2,
+      "images": 1,
+      "containers": 4,
+      "shapes": 2,
+      "icons": 1
+    },
+    "complexity": "medium",
+    "layoutType": "horizontal",
+    "colorPalette": [
+      "rgb(255, 255, 255)",
+      "rgb(0, 102, 204)",
+      "rgb(51, 51, 51)"
+    ]
+  },
+  "elements": {
+    "texts": [
+      {
+        "id": "text_001",
+        "name": "Main Headline",
+        "content": "Transforme seu negócio com IA",
+        "fontSize": 48,
+        "fontFamily": "Inter",
+        "position": { "x": 100, "y": 120 },
+        "dimensions": { "width": 600, "height": 120 }
+      },
+      {
+        "id": "text_002",
+        "name": "Subtitle",
+        "content": "Soluções inteligentes para empresas modernas",
+        "fontSize": 18,
+        "fontFamily": "Inter",
+        "position": { "x": 100, "y": 260 },
+        "dimensions": { "width": 500, "height": 50 }
+      }
+    ],
+    "buttons": [
+      {
+        "id": "btn_001",
+        "name": "CTA Button",
+        "position": { "x": 100, "y": 350 },
+        "dimensions": { "width": 200, "height": 50 },
+        "style": {
+          "fills": [
+            {
+              "type": "solid",
+              "color": "rgb(0, 102, 204)",
+              "opacity": 1
+            }
+          ],
+          "cornerRadius": 8
+        }
+      }
+    ],
+    "containers": [
+      {
+        "id": "container_001",
+        "name": "Header Container",
+        "position": { "x": 0, "y": 0 },
+        "dimensions": { "width": 1200, "height": 800 },
+        "layout": {
+          "mode": "HORIZONTAL",
+          "direction": "MIN",
+          "spacing": 24,
+          "padding": {
+            "top": 40,
+            "right": 80,
+            "bottom": 40,
+            "left": 80
+          }
+        },
+        "childrenCount": 8
+      }
+    ]
+  },
+  "patterns": {
+    "hasHeader": true,
+    "hasFooter": false,
+    "hasNavigation": true,
+    "hasCTA": true,
+    "hasCards": false,
+    "hasForm": false,
+    "layoutPattern": "header-content-footer"
+  },
+  "accessibility": {
+    "textContrast": "unknown",
+    "fontSizes": [48, 18, 16, 14],
+    "hasAltText": false,
+    "hasProperHierarchy": true,
+    "colorOnly": false,
+    "recommendations": [
+      "Considere adicionar texto alternativo para imagens",
+      "Verifique o contraste de cores para acessibilidade"
+    ]
+  },
+  "context": {
+    "purpose": "Design analysis for AI suggestions",
+    "requestedImprovements": [
+      "Visual hierarchy optimization",
+      "UX/UI best practices compliance", 
+      "Accessibility improvements",
+      "Design system consistency",
+      "Content and copy suggestions"
+    ]
+  }
+}

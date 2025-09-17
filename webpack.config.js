@@ -32,7 +32,8 @@ module.exports = {
       template: './src/ui.html',
       filename: 'ui.html',
       chunks: ['ui'],
-      inject: 'body'
+      inject: false,
+      minify: false
     })
   ]
 };

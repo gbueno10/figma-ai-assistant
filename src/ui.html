@@ -2,220 +2,625 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Design Assistant</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 0;
             margin: 0;
-            padding: 16px;
-            background: #f5f5f5;
-        }
-        
-        .container {
-            background: white;
-            border-radius: 8px;
-            padding: 16px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        h1 {
-            margin: 0 0 16px 0;
-            font-size: 18px;
+            background: #ffffff;
             color: #333;
-        }
-        
-        .status {
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 16px;
-            font-size: 12px;
-        }
-        
-        .status.info {
-            background: #e3f2fd;
-            color: #1976d2;
-        }
-        
-        .status.success {
-            background: #e8f5e8;
-            color: #2e7d32;
-        }
-        
-        .status.error {
-            background: #ffebee;
-            color: #c62828;
-        }
-        
-        button {
             width: 100%;
-            padding: 12px;
-            margin-bottom: 8px;
-            border: none;
-            border-radius: 6px;
-            background: #1976d2;
-            color: white;
-            font-size: 12px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f9fafb;
+            margin: 0;
+            padding: 0;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px 16px;
+            text-align: center;
             cursor: pointer;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            font-weight: 500;
+            color: #6b7280;
+            transition: all 0.2s;
         }
-        
-        button:hover {
-            background: #1565c0;
+
+        .tab.active {
+            color: #3b82f6;
+            background: #ffffff;
+            border-bottom: 2px solid #3b82f6;
         }
-        
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
+
+        .tab:hover:not(.active) {
+            background: #f3f4f6;
+            color: #374151;
         }
-        
-        .secondary {
-            background: #f5f5f5;
-            color: #333;
-            border: 1px solid #ddd;
-        }
-        
-        .secondary:hover {
-            background: #e0e0e0;
-        }
-        
-        .json-output {
-            margin-top: 16px;
+
+        .tab-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
             display: none;
         }
-        
-        .json-content {
-            background: #f8f9fa;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+
+        .tab-content.active {
+            display: block;
+        }
+
+        h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 20px 0;
+            text-align: center;
+            color: #1f2937;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: #374151;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            background: #ffffff;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 60px;
+            max-height: 120px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-bottom: 8px;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: #6b7280;
+        }
+
+        button.secondary:hover {
+            background: #374151;
+        }
+
+        .result {
+            margin-top: 16px;
             padding: 12px;
-            font-family: monospace;
-            font-size: 10px;
-            max-height: 200px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .result.success {
+            background: #dcfce7;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+        }
+
+        .result.error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+
+        .instruction {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 16px;
+            padding: 8px;
+            background: #f9fafb;
+            border-radius: 4px;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 16px;
+            color: #6b7280;
+        }
+
+        .progress-container {
+            margin-top: 12px;
+            background: #f3f4f6;
+            border-radius: 8px;
+            overflow: hidden;
+            height: 6px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+            border-radius: 8px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-text {
+            font-size: 12px;
+            margin-top: 8px;
+            color: #374151;
+        }
+
+        .api-key-info {
+            font-size: 11px;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .json-output {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            max-height: 300px;
             overflow-y: auto;
             white-space: pre-wrap;
+            word-break: break-all;
+            margin-top: 12px;
         }
-        
-        .stats {
-            background: #fafafa;
-            padding: 12px;
+
+        .checkbox-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .checkbox-option {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            border: 1px solid #e5e7eb;
             border-radius: 4px;
-            margin-bottom: 12px;
-            font-size: 11px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 12px;
+        }
+
+        .checkbox-option:hover {
+            background-color: #f9fafb;
+        }
+
+        .checkbox-option input[type="checkbox"] {
+            width: auto;
+            margin-right: 6px;
+            margin-bottom: 0;
+        }
+
+        .checkbox-option.selected {
+            background-color: #eff6ff;
+            border-color: #3b82f6;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .button-group button {
+            flex: 1;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🤖 AI Design Assistant</h1>
-        
-        <div id="status" class="status info">
-            Selecione um frame e clique em Analisar
+        <!-- Navigation Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="analyze">🔍 Analisar</button>
+            <button class="tab" data-tab="modify">🎨 Modificar Design</button>
         </div>
-        
-        <button id="analyzeBtn">📸 Analisar Design</button>
-        <button id="exportBtn" class="secondary">📄 Exportar JSON</button>
-        <button id="closeBtn" class="secondary">❌ Fechar</button>
-        
-        <div id="jsonOutput" class="json-output">
-            <h3>📊 Resultado da Análise</h3>
-            <div id="stats" class="stats"></div>
-            <pre id="jsonContent" class="json-content"></pre>
+
+        <!-- Analyze Tab Content -->
+        <div class="tab-content active" id="analyze">
+            <h1>🔍 Análise de Design</h1>
+            
+            <div class="instruction">
+                💡 <strong>Como usar:</strong> Selecione um frame no Figma e clique em "Analisar" para extrair informações estruturadas do design.
+            </div>
+
+            <div class="button-group">
+                <button id="analyzeBtn">📊 Analisar Design</button>
+                <button id="exportBtn" class="secondary">📄 Exportar JSON</button>
+            </div>
+
+            <button id="closeBtn" class="secondary">❌ Fechar</button>
+
+            <div class="loading" id="loadingAnalyze">
+                ⏳ Analisando design...
+                <div class="progress-container">
+                    <div class="progress-bar" id="progressBarAnalyze"></div>
+                </div>
+                <div class="progress-text" id="progressTextAnalyze"></div>
+            </div>
+
+            <div id="resultAnalyze"></div>
+
+            <div id="jsonOutput" class="json-output" style="display: none;"></div>
+        </div>
+
+        <!-- Modify Design Tab Content -->
+        <div class="tab-content" id="modify">
+            <h1>🎨 Modificar Design com IA</h1>
+            
+            <div class="instruction">
+                💡 <strong>Como usar:</strong> Selecione elementos no Figma, descreva as modificações desejadas e deixe a IA transformar seu design.
+                <br><br>
+                📋 <strong>Duplicação automática:</strong> O sistema criará uma cópia dos elementos selecionados antes de aplicar as modificações, preservando o design original.
+            </div>
+
+            <form id="modifyForm">
+                <div class="form-group">
+                    <label for="apiKey">Chave API OpenAI:</label>
+                    <input type="password" id="apiKey" placeholder="sk-..." required>
+                    <div class="api-key-info">
+                        🔒 Sua chave é armazenada apenas localmente
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="modifyPrompt">Descreva as modificações desejadas:</label>
+                    <textarea id="modifyPrompt" placeholder="Ex: Mude as cores para um esquema mais moderno, ajuste o tamanho das fontes para melhor hierarquia..." required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Tipos de modificação:</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-option">
+                            <input type="checkbox" name="modifyTypes" value="text" checked> Texto
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="checkbox" name="modifyTypes" value="color" checked> Cores
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="checkbox" name="modifyTypes" value="layout"> Layout
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="checkbox" name="modifyTypes" value="style"> Estilos
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" id="modifyBtn">
+                    🚀 Modificar com IA
+                </button>
+            </form>
+
+            <div class="loading" id="loadingModify">
+                ⏳ Modificando design...
+                <div class="progress-container">
+                    <div class="progress-bar" id="progressBarModify"></div>
+                </div>
+                <div class="progress-text" id="progressTextModify"></div>
+            </div>
+
+            <div id="resultModify"></div>
         </div>
     </div>
 
     <script>
-        console.log('UI carregada');
+        console.log('🚀 AI Design Assistant UI carregada');
         
-        // Elementos da UI
-        const analyzeBtn = document.getElementById('analyzeBtn');
-        const exportBtn = document.getElementById('exportBtn');
-        const closeBtn = document.getElementById('closeBtn');
-        const status = document.getElementById('status');
-        const jsonOutput = document.getElementById('jsonOutput');
-        const jsonContent = document.getElementById('jsonContent');
-        const stats = document.getElementById('stats');
-        
-        let currentData = null;
-        
-        // Função para atualizar status
-        function updateStatus(message, type = 'info') {
-            status.textContent = message;
-            status.className = `status ${type}`;
+        // Global variables
+        let currentJsonData = null;
+
+        // Tab functionality
+        function initTabs() {
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const targetTab = tab.dataset.tab;
+                    
+                    // Remove active class from all tabs and contents
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tabContents.forEach(tc => tc.classList.remove('active'));
+                    
+                    // Add active class to clicked tab and corresponding content
+                    tab.classList.add('active');
+                    document.getElementById(targetTab).classList.add('active');
+                    
+                    console.log(`📑 Mudou para aba: ${targetTab}`);
+                });
+            });
         }
-        
-        // Event Listeners
-        analyzeBtn.addEventListener('click', function() {
-            console.log('Botão analisar clicado');
-            updateStatus('🔄 Analisando...', 'info');
-            analyzeBtn.disabled = true;
+
+        // Settings management
+        function saveSettings() {
+            const apiKey = document.getElementById('apiKey').value;
             
             parent.postMessage({
-                pluginMessage: { type: 'capture-and-analyze' }
+                pluginMessage: {
+                    type: 'save-settings',
+                    apiKey: apiKey
+                }
             }, '*');
-        });
-        
-        exportBtn.addEventListener('click', function() {
-            console.log('Botão exportar clicado');
-            if (currentData) {
-                navigator.clipboard.writeText(JSON.stringify(currentData, null, 2))
-                    .then(() => updateStatus('📋 JSON copiado!', 'success'))
-                    .catch(() => updateStatus('❌ Erro ao copiar', 'error'));
-            } else {
+            
+            console.log('📤 Salvando configurações...');
+        }
+
+        function loadSettings() {
+            parent.postMessage({
+                pluginMessage: {
+                    type: 'load-settings'
+                }
+            }, '*');
+            
+            console.log('📥 Carregando configurações...');
+        }
+
+        // Analyze functionality
+        function initAnalyze() {
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const exportBtn = document.getElementById('exportBtn');
+            const closeBtn = document.getElementById('closeBtn');
+
+            analyzeBtn.addEventListener('click', () => {
+                console.log('🔍 Iniciando análise...');
+                
+                // Show loading
+                document.getElementById('loadingAnalyze').style.display = 'block';
+                analyzeBtn.disabled = true;
+                document.getElementById('resultAnalyze').innerHTML = '';
+                document.getElementById('jsonOutput').style.display = 'none';
+                
+                // Reset progress
+                document.getElementById('progressBarAnalyze').style.width = '0%';
+                document.getElementById('progressTextAnalyze').textContent = 'Iniciando análise...';
+
                 parent.postMessage({
-                    pluginMessage: { type: 'export-json' }
+                    pluginMessage: {
+                        type: 'capture-and-analyze'
+                    }
                 }, '*');
-            }
-        });
-        
-        closeBtn.addEventListener('click', function() {
-            console.log('Botão fechar clicado');
-            parent.postMessage({
-                pluginMessage: { type: 'cancel' }
-            }, '*');
-        });
-        
-        // Escutar mensagens do plugin
-        window.onmessage = function(event) {
+            });
+
+            exportBtn.addEventListener('click', () => {
+                console.log('📄 Exportando JSON...');
+                
+                parent.postMessage({
+                    pluginMessage: {
+                        type: 'export-json'
+                    }
+                }, '*');
+            });
+
+            closeBtn.addEventListener('click', () => {
+                console.log('❌ Fechando plugin...');
+                
+                parent.postMessage({
+                    pluginMessage: {
+                        type: 'cancel'
+                    }
+                }, '*');
+            });
+        }
+
+        // Modify functionality
+        function initModify() {
+            const modifyForm = document.getElementById('modifyForm');
+            const modifyBtn = document.getElementById('modifyBtn');
+
+            // Add visual feedback for checkbox selection
+            document.addEventListener('change', function(e) {
+                if (e.target.name === 'modifyTypes') {
+                    if (e.target.checked) {
+                        e.target.parentElement.classList.add('selected');
+                    } else {
+                        e.target.parentElement.classList.remove('selected');
+                    }
+                }
+            });
+
+            // Initialize selected checkboxes
+            document.querySelectorAll('input[name="modifyTypes"]:checked').forEach(checkbox => {
+                checkbox.parentElement.classList.add('selected');
+            });
+
+            modifyForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const apiKey = document.getElementById('apiKey').value;
+                const prompt = document.getElementById('modifyPrompt').value;
+                const types = Array.from(document.querySelectorAll('input[name="modifyTypes"]:checked'))
+                    .map(checkbox => checkbox.value);
+
+                if (!apiKey || !prompt || types.length === 0) {
+                    showResult('Por favor, preencha a chave API, descrição das modificações e selecione pelo menos um tipo.', 'error', 'resultModify');
+                    return;
+                }
+
+                // Save settings
+                saveSettings();
+
+                // Show loading
+                document.getElementById('loadingModify').style.display = 'block';
+                modifyBtn.disabled = true;
+                document.getElementById('resultModify').innerHTML = '';
+                
+                // Reset progress
+                document.getElementById('progressBarModify').style.width = '0%';
+                document.getElementById('progressTextModify').textContent = 'Iniciando modificação...';
+
+                // Send message to main code
+                parent.postMessage({
+                    pluginMessage: {
+                        type: 'modify-design',
+                        prompt: prompt,
+                        types: types,
+                        apiKey: apiKey
+                    }
+                }, '*');
+            });
+        }
+
+        // Listen to messages from main code
+        window.addEventListener('message', function(event) {
             const msg = event.data.pluginMessage;
-            console.log('Mensagem recebida:', msg);
+            console.log('📨 Mensagem recebida da UI:', msg);
             
-            if (msg.type === 'analysis-complete') {
-                console.log('Análise completa recebida');
-                currentData = msg.structuredData;
-                
-                // Atualizar UI
-                updateStatus('✅ Análise concluída!', 'success');
-                analyzeBtn.disabled = false;
-                
-                // Mostrar estatísticas
-                const summary = msg.structuredData.summary;
-                stats.innerHTML = `
-                    <strong>Elementos:</strong> ${summary.totalElements} | 
-                    <strong>Textos:</strong> ${summary.elementTypes.text} | 
-                    <strong>Botões:</strong> ${summary.elementTypes.buttons} |
-                    <strong>Complexidade:</strong> ${summary.complexity}
-                `;
-                
-                // Mostrar JSON
-                jsonContent.textContent = JSON.stringify(msg.structuredData, null, 2);
-                jsonOutput.style.display = 'block';
-                
-            } else if (msg.type === 'error') {
-                console.log('Erro recebido:', msg.message);
-                updateStatus(`❌ ${msg.message}`, 'error');
-                analyzeBtn.disabled = false;
-                
-            } else if (msg.type === 'frame-selected') {
-                updateStatus(`📋 Frame: ${msg.frameName} (${msg.elementCount} elementos)`, 'info');
-                
-            } else if (msg.type === 'json-exported') {
-                currentData = msg.data;
-                jsonContent.textContent = JSON.stringify(msg.data, null, 2);
-                jsonOutput.style.display = 'block';
-                updateStatus('📄 JSON exportado!', 'success');
+            if (msg.type === 'settings-loaded') {
+                // Fill fields with loaded settings
+                if (msg.apiKey) {
+                    document.getElementById('apiKey').value = msg.apiKey;
+                    console.log('✅ Chave API carregada');
+                } else {
+                    console.log('⚠️ Nenhuma chave API salva');
+                }
             }
-        };
-        
-        console.log('Event listeners configurados');
+            else if (msg.type === 'analysis-complete') {
+                // Hide loading
+                document.getElementById('loadingAnalyze').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
+                
+                // Store data
+                currentJsonData = msg.structuredData;
+                
+                // Show result
+                showResult('✅ Análise concluída com sucesso!', 'success', 'resultAnalyze');
+                
+                // Display JSON
+                const jsonOutput = document.getElementById('jsonOutput');
+                jsonOutput.textContent = JSON.stringify(msg.structuredData, null, 2);
+                jsonOutput.style.display = 'block';
+                
+                console.log('✅ Análise concluída, JSON exibido');
+            }
+            else if (msg.type === 'json-exported') {
+                showResult('📄 JSON exportado com sucesso!', 'success', 'resultAnalyze');
+                
+                // Update displayed JSON
+                currentJsonData = msg.data;
+                const jsonOutput = document.getElementById('jsonOutput');
+                jsonOutput.textContent = JSON.stringify(msg.data, null, 2);
+                jsonOutput.style.display = 'block';
+                
+                console.log('📄 JSON exportado');
+            }
+            else if (msg.type === 'modify-progress') {
+                // Update progress for modify tab
+                const progressBar = document.getElementById('progressBarModify');
+                const progressText = document.getElementById('progressTextModify');
+                
+                if (msg.step && msg.totalSteps) {
+                    const percentage = (msg.step / msg.totalSteps) * 100;
+                    progressBar.style.width = `${percentage}%`;
+                }
+                
+                progressText.textContent = msg.message;
+                console.log(`🔄 Progresso modificação: ${msg.message}`);
+            }
+            else if (msg.type === 'ai-modifications-received') {
+                // Show AI modifications for debugging
+                console.log('🤖 Modificações da IA recebidas:', msg.modifications);
+                
+                const resultDiv = document.getElementById('resultModify');
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        <strong>🤖 Modificações da IA:</strong><br>
+                        <div class="json-output" style="margin-top: 8px;">
+                            ${JSON.stringify(msg.modifications, null, 2)}
+                        </div>
+                    </div>
+                `;
+            }
+            else if (msg.type === 'modification-complete') {
+                // Hide loading
+                document.getElementById('loadingModify').style.display = 'none';
+                document.getElementById('modifyBtn').disabled = false;
+                
+                showResult('✅ Modificações aplicadas com sucesso!', 'success', 'resultModify');
+                console.log('✅ Modificações concluídas');
+            }
+            else if (msg.type === 'error') {
+                // Hide loading for both tabs
+                document.getElementById('loadingAnalyze').style.display = 'none';
+                document.getElementById('loadingModify').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
+                document.getElementById('modifyBtn').disabled = false;
+                
+                // Show error in both result areas
+                showResult(`❌ ${msg.message}`, 'error', 'resultAnalyze');
+                showResult(`❌ ${msg.message}`, 'error', 'resultModify');
+                console.log('❌ Erro:', msg.message);
+            }
+        });
+
+        function showResult(message, type, containerId) {
+            const resultDiv = document.getElementById(containerId);
+            resultDiv.innerHTML = message.replace(/\n/g, '<br>');
+            resultDiv.className = `result ${type}`;
+        }
+
+        // Initialize everything
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 Inicializando AI Design Assistant...');
+            
+            initTabs();
+            initAnalyze();
+            initModify();
+            loadSettings();
+            
+            console.log('✅ AI Design Assistant inicializado');
+        });
     </script>
 </body>
 </html>

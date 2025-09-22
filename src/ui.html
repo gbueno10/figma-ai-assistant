@@ -153,12 +153,16 @@
         }
 
         .result.error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #dc2626;
+            background-color: #fff2f2;
+            border-color: #ff6b6b;
+            color: #d63031;
         }
 
-        .instruction {
+        .result.warning {
+            background-color: #fff8e1;
+            border-color: #ffb74d;
+            color: #f57f17;
+        }        .instruction {
             font-size: 12px;
             color: #6b7280;
             margin-bottom: 16px;
@@ -258,6 +262,22 @@
         .button-group button {
             flex: 1;
         }
+
+        .api-key-global {
+            background: #f8fafc;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 16px;
+            margin: 0;
+        }
+
+        .api-key-global .form-group {
+            margin: 0;
+        }
+
+        .api-key-global label {
+            font-weight: 600;
+            color: #374151;
+        }
     </style>
 </head>
 <body>
@@ -266,6 +286,18 @@
         <div class="tabs">
             <button class="tab active" data-tab="analyze">🔍 Analisar</button>
             <button class="tab" data-tab="modify">🎨 Modificar Design</button>
+            <button class="tab" data-tab="generate">🖼️ Gerar Imagens</button>
+        </div>
+
+        <!-- Global API Key Section -->
+        <div class="api-key-global">
+            <div class="form-group">
+                <label for="globalApiKey">🔑 Chave API OpenAI (Global):</label>
+                <input type="password" id="globalApiKey" placeholder="sk-..." required>
+                <div class="api-key-info">
+                    🔒 Usada para todas as funcionalidades (análise, modificação e geração de imagens)
+                </div>
+            </div>
         </div>
 
         <!-- Analyze Tab Content -->
@@ -308,14 +340,6 @@
 
             <form id="modifyForm">
                 <div class="form-group">
-                    <label for="apiKey">Chave API OpenAI:</label>
-                    <input type="password" id="apiKey" placeholder="sk-..." required>
-                    <div class="api-key-info">
-                        🔒 Sua chave é armazenada apenas localmente
-                    </div>
-                </div>
-
-                <div class="form-group">
                     <label for="modifyPrompt">Descreva as modificações desejadas:</label>
                     <textarea id="modifyPrompt" placeholder="Ex: Mude as cores para um esquema mais moderno, ajuste o tamanho das fontes para melhor hierarquia..." required></textarea>
                 </div>
@@ -353,6 +377,65 @@
 
             <div id="resultModify"></div>
         </div>
+
+        <!-- Generate Images Tab Content -->
+        <div class="tab-content" id="generate">
+            <h1>🖼️ Gerar Imagens com IA</h1>
+            
+            <div class="instruction">
+                💡 <strong>Como usar:</strong> Descreva a imagem que deseja gerar ou selecione uma imagem existente para substituir.
+                <br><br>
+                🎨 <strong>Modos disponíveis:</strong> Criar nova imagem ou substituir imagem selecionada no Figma.
+            </div>
+
+            <form id="generateForm">
+                <div class="form-group">
+                    <label for="imagePrompt">Descreva a imagem que deseja gerar:</label>
+                    <textarea id="imagePrompt" placeholder="Ex: um robô futurista pintando uma tela em estilo Van Gogh, arte digital, alta qualidade, cores vibrantes..." required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Tamanho da imagem:</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-option">
+                            <input type="radio" name="imageSize" value="1024x1024" checked> 1024x1024 (quadrada)
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="radio" name="imageSize" value="1024x1792"> 1024x1792 (retrato)
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="radio" name="imageSize" value="1792x1024"> 1792x1024 (paisagem)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Modo de operação:</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-option">
+                            <input type="radio" name="generateMode" value="create" checked> 🆕 Criar nova imagem
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="radio" name="generateMode" value="replace"> 🔄 Substituir imagem selecionada
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" id="generateBtn">
+                    🎨 Gerar Imagem com IA
+                </button>
+            </form>
+
+            <div class="loading" id="loadingGenerate">
+                ⏳ Gerando imagem com IA...
+                <div class="progress-container">
+                    <div class="progress-bar" id="progressBarGenerate"></div>
+                </div>
+                <div class="progress-text" id="progressTextGenerate"></div>
+            </div>
+
+            <div id="resultGenerate"></div>
+        </div>
     </div>
 
     <script>
@@ -385,7 +468,7 @@
 
         // Settings management
         function saveSettings() {
-            const apiKey = document.getElementById('apiKey').value;
+            const apiKey = document.getElementById('globalApiKey').value;
             
             parent.postMessage({
                 pluginMessage: {
@@ -478,13 +561,13 @@
             modifyForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 
-                const apiKey = document.getElementById('apiKey').value;
+                const apiKey = document.getElementById('globalApiKey').value;
                 const prompt = document.getElementById('modifyPrompt').value;
                 const types = Array.from(document.querySelectorAll('input[name="modifyTypes"]:checked'))
                     .map(checkbox => checkbox.value);
 
                 if (!apiKey || !prompt || types.length === 0) {
-                    showResult('Por favor, preencha a chave API, descrição das modificações e selecione pelo menos um tipo.', 'error', 'resultModify');
+                    showResult('Por favor, preencha a chave API global, descrição das modificações e selecione pelo menos um tipo.', 'error', 'resultModify');
                     return;
                 }
 
@@ -512,6 +595,52 @@
             });
         }
 
+        // Generate Image Form Handler
+        function initGenerateForm() {
+            const generateForm = document.getElementById('generateForm');
+            const generateBtn = document.getElementById('generateBtn');
+
+            if (!generateForm || !generateBtn) {
+                console.log('⚠️ Generate form not found');
+                return;
+            }
+
+            generateForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const apiKey = document.getElementById('globalApiKey').value;
+                const prompt = document.getElementById('imagePrompt').value;
+                const size = document.querySelector('input[name="imageSize"]:checked').value;
+                const mode = document.querySelector('input[name="generateMode"]:checked').value;
+
+                if (!apiKey || !prompt) {
+                    showResult('Por favor, preencha a chave API global e a descrição da imagem.', 'error', 'resultGenerate');
+                    return;
+                }
+
+                // Show loading
+                document.getElementById('loadingGenerate').style.display = 'block';
+                generateBtn.disabled = true;
+                document.getElementById('resultGenerate').innerHTML = '';
+                
+                // Reset progress
+                document.getElementById('progressBarGenerate').style.width = '0%';
+                document.getElementById('progressTextGenerate').textContent = 'Iniciando geração...';
+
+                // Send message based on mode
+                const messageType = mode === 'create' ? 'generate-new-image' : 'replace-image';
+                
+                parent.postMessage({
+                    pluginMessage: {
+                        type: messageType,
+                        prompt: prompt,
+                        size: size,
+                        apiKey: apiKey
+                    }
+                }, '*');
+            });
+        }
+
         // Listen to messages from main code
         window.addEventListener('message', function(event) {
             const msg = event.data.pluginMessage;
@@ -520,8 +649,8 @@
             if (msg.type === 'settings-loaded') {
                 // Fill fields with loaded settings
                 if (msg.apiKey) {
-                    document.getElementById('apiKey').value = msg.apiKey;
-                    console.log('✅ Chave API carregada');
+                    document.getElementById('globalApiKey').value = msg.apiKey;
+                    console.log('✅ Chave API global carregada');
                 } else {
                     console.log('⚠️ Nenhuma chave API salva');
                 }
@@ -582,6 +711,112 @@
                     </div>
                 `;
             }
+            else if (msg.type === 'image-progress') {
+                // Update progress for image generation
+                const progressBar = document.getElementById('progressBarGenerate');
+                const progressText = document.getElementById('progressTextGenerate');
+                
+                if (msg.step && msg.totalSteps) {
+                    const percentage = (msg.step / msg.totalSteps) * 100;
+                    progressBar.style.width = `${percentage}%`;
+                }
+                
+                progressText.textContent = msg.message;
+                console.log(`🎨 Progresso geração: ${msg.message}`);
+            }
+            else if (msg.type === 'image-generation-complete') {
+                // Hide loading
+                document.getElementById('loadingGenerate').style.display = 'none';
+                document.getElementById('generateBtn').disabled = false;
+                
+                // Show success
+                showResult('✅ Imagem gerada e adicionada com sucesso!', 'success', 'resultGenerate');
+                
+                // Show image preview if URL available
+                if (msg.imageUrl) {
+                    const resultDiv = document.getElementById('resultGenerate');
+                    resultDiv.innerHTML += `
+                        <div class="result success" style="margin-top: 10px;">
+                            <strong>🖼️ Imagem gerada:</strong><br>
+                            <img src="${msg.imageUrl}" alt="Imagem gerada" style="max-width: 100%; margin-top: 8px; border-radius: 8px;">
+                        </div>
+                    `;
+                }
+                
+                console.log('✅ Geração de imagem concluída');
+            }
+            else if (msg.type === 'image-replacement-complete') {
+                // Hide loading
+                document.getElementById('loadingGenerate').style.display = 'none';
+                document.getElementById('generateBtn').disabled = false;
+                
+                // Show success
+                showResult('✅ Imagem substituída com sucesso!', 'success', 'resultGenerate');
+                
+                // Show image preview if URL available
+                if (msg.imageUrl) {
+                    const resultDiv = document.getElementById('resultGenerate');
+                    resultDiv.innerHTML += `
+                        <div class="result success" style="margin-top: 10px;">
+                            <strong>🔄 Nova imagem:</strong><br>
+                            <img src="${msg.imageUrl}" alt="Imagem substituta" style="max-width: 100%; margin-top: 8px; border-radius: 8px;">
+                        </div>
+                    `;
+                }
+                
+                console.log('✅ Substituição de imagem concluída');
+            }
+            else if (msg.type === 'image-fetch-restricted') {
+                // Hide loading
+                document.getElementById('loadingGenerate').style.display = 'none';
+                document.getElementById('generateBtn').disabled = false;
+                
+                // Show restriction message with manual solution
+                const resultDiv = document.getElementById('resultGenerate');
+                let content = `
+                    <div class="result warning">
+                        <strong>⚠️ Restrição de Segurança do Figma</strong><br><br>
+                        O Figma não permite que plugins baixem imagens externas automaticamente por questões de segurança.<br><br>
+                        <strong>💡 Solução Manual:</strong><br>
+                        1. Clique no botão abaixo para abrir a imagem gerada<br>
+                        2. Clique com botão direito na imagem → "Salvar imagem como..."<br>
+                        3. Volte ao Figma e arraste a imagem salva para o canvas<br><br>
+                `;
+                
+                if (msg.imageUrl) {
+                    content += `
+                        <a href="${msg.imageUrl}" target="_blank" class="manual-download-btn" style="
+                            display: inline-block;
+                            background: #18a0fb;
+                            color: white;
+                            padding: 10px 20px;
+                            text-decoration: none;
+                            border-radius: 6px;
+                            font-weight: 500;
+                            margin: 10px 0;
+                        ">🖼️ Abrir Imagem Gerada</a><br><br>
+                        
+                        <details style="margin-top: 10px;">
+                            <summary style="cursor: pointer; font-weight: 500;">🔗 URL da Imagem (clique para expandir)</summary>
+                            <div style="
+                                background: #f5f5f5;
+                                padding: 10px;
+                                border-radius: 4px;
+                                margin-top: 8px;
+                                word-break: break-all;
+                                font-family: monospace;
+                                font-size: 12px;
+                            ">${msg.imageUrl}</div>
+                        </details>
+                    `;
+                }
+                
+                content += `</div>`;
+                resultDiv.innerHTML = content;
+                
+                console.log('⚠️ Restrição de fetch detectada, mostrando solução manual');
+                console.log('🖼️ URL da imagem:', msg.imageUrl);
+            }
             else if (msg.type === 'modification-complete') {
                 // Hide loading
                 document.getElementById('loadingModify').style.display = 'none';
@@ -617,6 +852,7 @@
             initTabs();
             initAnalyze();
             initModify();
+            initGenerateForm();
             loadSettings();
             
             console.log('✅ AI Design Assistant inicializado');

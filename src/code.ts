@@ -3,6 +3,7 @@
 // Importações dos módulos
 import { AIDesignAssistant } from './aiDesignAssistant';
 import { DesignModificationHandler } from './handlers/designModificationHandler';
+import { ImageGenerationHandler } from './handlers/imageGenerationHandler';
 
 // Plugin principal do AI Design Assistant
 figma.showUI(__html__, { width: 400, height: 500 });
@@ -78,6 +79,12 @@ figma.ui.onmessage = async (msg) => {
       figma.closePlugin();
     } else if (msg.type === 'modify-design') {
       await DesignModificationHandler.handleDesignModification(msg);
+    
+    } else if (msg.type === 'generate-new-image') {
+      await ImageGenerationHandler.handleGenerateNewImage(msg);
+    
+    } else if (msg.type === 'replace-image') {
+      await ImageGenerationHandler.handleReplaceImage(msg);
     
     } else if (msg.type === 'load-settings') {
       try {

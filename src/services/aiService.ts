@@ -1,4 +1,5 @@
 // Serviço para comunicação com APIs de IA
+import OpenAI from "openai";
 
 export class AIService {
   
@@ -6,6 +7,11 @@ export class AIService {
   static async sendToAI(screenshot: string, structure: any, apiKey: string): Promise<any> {
     const apiStartTime = Date.now();
     console.log(`🤖 [API-${apiStartTime}] Starting design analysis with OpenAI...`);
+    
+    const client = new OpenAI({
+      apiKey: apiKey,
+      dangerouslyAllowBrowser: true // Necessário para ambiente Figma
+    });
     
     const systemPrompt = `You are an expert UI/UX designer and consultant. You will receive a screenshot and detailed structural analysis of a Figma design.
 
@@ -44,76 +50,27 @@ ${JSON.stringify(structure, null, 2)}
 
 Please analyze this design and provide specific suggestions for improvement.`;
 
-    const requestBody = {
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: inputMessage
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: screenshot
-              }
-            }
-          ]
-        }
-      ],
-      response_format: { type: "json_object" },
-      max_tokens: 2000
-    };
-
-    console.log(`📤 [API-${Date.now() - apiStartTime}ms] Sending request to OpenAI Chat Completions API...`);
+    console.log(`📤 [API-${Date.now() - apiStartTime}ms] Sending request to OpenAI Responses API...`);
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(requestBody)
+      const response = await client.responses.create({
+        model: "gpt-5",
+        input: inputMessage,
+        text: {
+          format: { type: "json_object" }
+        }
       });
 
-      console.log(`📥 [API-${Date.now() - apiStartTime}ms] Response status:`, response.status);
+      console.log(`✅ [API-${Date.now() - apiStartTime}ms] GPT-5 returned data`);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log(`❌ [API-${Date.now() - apiStartTime}ms] Error response body:`, errorText);
-        
-        let userFriendlyError = `OpenAI API error (${response.status})`;
-        if (response.status === 401) {
-          userFriendlyError = 'Chave API inválida. Verifique suas credenciais.';
-        } else if (response.status === 429) {
-          userFriendlyError = 'Limite de taxa excedido. Tente novamente em alguns minutos.';
-        } else if (response.status >= 500) {
-          userFriendlyError = 'Erro do servidor OpenAI. Tente novamente mais tarde.';
-        } else if (response.status === 400) {
-          userFriendlyError = 'Requisição inválida. Verifique os dados enviados.';
-        }
-        
-        throw new Error(`${userFriendlyError}: ${errorText}`);
-      }
+      // Extract content from Responses API
+      const contentRaw = response.output_text;
 
-      const data = await response.json() as any;
-      console.log(`✅ [API-${Date.now() - apiStartTime}ms] OpenAI returned data`);
-
-      // Extract content from Chat Completions API
-      const content = data.choices?.[0]?.message?.content;
-      
-      if (!content || content.trim() === '') {
+      if (!contentRaw || contentRaw.trim() === '') {
         throw new Error('Resposta vazia da API OpenAI');
       }
 
-      const analysisResult = JSON.parse(content);
+      const analysisResult = JSON.parse(contentRaw);
 
       if (typeof analysisResult !== 'object' || analysisResult === null) {
         throw new Error('A resposta da API não é um JSON válido.');
@@ -135,7 +92,12 @@ Please analyze this design and provide specific suggestions for improvement.`;
   // Obtém modificações da IA usando OpenAI API
   static async getAIModifications(designAnalysis: any, prompt: string, types: string[], apiKey: string) {
     const apiStartTime = Date.now();
-    console.log(`🤖 [API-${apiStartTime}] Starting design modification with GPT-5-MINI...`);
+    console.log(`🤖 [API-${apiStartTime}] Starting design modification with GPT-5...`);
+    
+    const client = new OpenAI({
+      apiKey: apiKey,
+      dangerouslyAllowBrowser: true // Necessário para ambiente Figma
+    });
     
     const systemPrompt = `You are an expert UI/UX designer and developer. You will receive design data from Figma and a user prompt for modifications.
 
@@ -192,72 +154,21 @@ Modification Types Requested: ${types.join(', ')}
 
 Please provide specific modifications to achieve the user's request.`;
 
-    const requestBody = {
-      model: 'gpt-5-mini',
-      reasoning: { effort: 'medium' },
-      input: inputMessage,
-      text: {
-        format: { type: "json_object" }
-      }
-    };
-
     console.log(`📤 [API-${Date.now() - apiStartTime}ms] Sending request to OpenAI Responses API...`);
 
     try {
-      const response = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(requestBody)
+      const response = await client.responses.create({
+        model: "gpt-5",
+        input: inputMessage,
+        text: {
+          format: { type: "json_object" }
+        }
       });
 
-      console.log(`📥 [API-${Date.now() - apiStartTime}ms] Response status:`, response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log(`❌ [API-${Date.now() - apiStartTime}ms] Error response body:`, errorText);
-        
-        let userFriendlyError = `OpenAI API error (${response.status})`;
-        if (response.status === 401) {
-          userFriendlyError = 'Chave API inválida. Verifique suas credenciais.';
-        } else if (response.status === 429) {
-          userFriendlyError = 'Limite de taxa excedido. Tente novamente em alguns minutos.';
-        } else if (response.status >= 500) {
-          userFriendlyError = 'Erro do servidor OpenAI. Tente novamente mais tarde.';
-        } else if (response.status === 400) {
-          userFriendlyError = 'Requisição inválida. Verifique os dados enviados.';
-        }
-        
-        throw new Error(`${userFriendlyError}: ${errorText}`);
-      }
-
-      const data = await response.json() as any;
-      console.log(`✅ [API-${Date.now() - apiStartTime}ms] GPT-5-MINI returned data keys:`, Object.keys(data));
+      console.log(`✅ [API-${Date.now() - apiStartTime}ms] GPT-5 returned data`);
 
       // Extract modification content from Responses API
-      let modificationContentRaw: string | undefined = undefined;
-
-      if (data.output && Array.isArray(data.output) && data.output.length > 1) {
-        const messageOutput = data.output[1];
-        if (messageOutput && messageOutput.content && Array.isArray(messageOutput.content) && messageOutput.content.length > 0) {
-          const contentItem = messageOutput.content[0];
-          if (contentItem && contentItem.text) {
-            modificationContentRaw = contentItem.text;
-          }
-        }
-      }
-
-      if (!modificationContentRaw && data.output && Array.isArray(data.output) && data.output.length > 0) {
-        const firstOutput = data.output[0];
-        if (firstOutput && firstOutput.content && Array.isArray(firstOutput.content) && firstOutput.content.length > 0) {
-          const contentItem = firstOutput.content[0];
-          if (contentItem && contentItem.text) {
-            modificationContentRaw = contentItem.text;
-          }
-        }
-      }
+      const modificationContentRaw = response.output_text;
 
       if (!modificationContentRaw || modificationContentRaw.trim() === '') {
         throw new Error('Resposta vazia da API OpenAI');

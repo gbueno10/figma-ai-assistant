@@ -68,9 +68,8 @@ Please analyze this design and provide specific suggestions for improvement.`;
         }
       ],
       response_format: { type: "json_object" },
-      verbosity: "medium",
-      reasoning_effort: "minimal",
-      max_completion_tokens: 2000
+      verbosity: "low",
+      reasoning_effort: "minimal"
     };
 
     console.log(`📤 [API-${Date.now() - apiStartTime}ms] Sending request to OpenAI Chat Completions API...`);
@@ -111,12 +110,37 @@ Please analyze this design and provide specific suggestions for improvement.`;
       // Log token usage
       if (data.usage) {
         console.log(`📊 [TOKENS] Input: ${data.usage.prompt_tokens} | Output: ${data.usage.completion_tokens} | Total: ${data.usage.total_tokens}`);
+        
+        // Calculate cost estimation (GPT-5 pricing - real prices from OpenAI)
+        const inputCost = (data.usage.prompt_tokens / 1000000) * 1.25; // $1.25 per 1M input tokens
+        const outputCost = (data.usage.completion_tokens / 1000000) * 10.00; // $10.00 per 1M output tokens
+        
+        // Check for cached tokens
+        let cachedCost = 0;
+        if (data.usage.prompt_tokens_details?.cached_tokens) {
+          cachedCost = (data.usage.prompt_tokens_details.cached_tokens / 1000000) * 0.125; // $0.125 per 1M cached tokens
+          console.log(`💾 [CACHED] ${data.usage.prompt_tokens_details.cached_tokens} tokens cached`);
+        }
+        
+        const totalCost = inputCost + outputCost + cachedCost;
+        console.log(`💰 [COST] Input: $${inputCost.toFixed(6)} | Output: $${outputCost.toFixed(6)} | Cached: $${cachedCost.toFixed(6)} | Total: $${totalCost.toFixed(6)}`);
       }
 
       // Extract content from Chat Completions API
       const content = data.choices?.[0]?.message?.content;
+      const finishReason = data.choices?.[0]?.finish_reason;
+      
+      console.log(`🔍 [DEBUG] Raw content from OpenAI:`, content);
+      console.log(`🔍 [DEBUG] Content type:`, typeof content);
+      console.log(`🔍 [DEBUG] Content length:`, content ? content.length : 'null/undefined');
+      console.log(`🔍 [DEBUG] Finish reason:`, finishReason);
+      
+      if (finishReason === 'length') {
+        throw new Error('GPT-5 atingiu o limite de tokens. Tente uma análise mais simples ou aumente o limite de tokens.');
+      }
       
       if (!content || content.trim() === '') {
+        console.log(`❌ [DEBUG] Content is empty or null. Full response data:`, JSON.stringify(data, null, 2));
         throw new Error('Resposta vazia da API OpenAI');
       }
 
@@ -212,9 +236,8 @@ Please provide specific modifications to achieve the user's request.`;
         }
       ],
       response_format: { type: "json_object" },
-      verbosity: "medium",
-      reasoning_effort: "minimal",
-      max_completion_tokens: 2000
+      verbosity: "low",
+      reasoning_effort: "minimal"
     };
 
     console.log(`📤 [API-${Date.now() - apiStartTime}ms] Sending request to OpenAI Chat Completions API...`);
@@ -256,17 +279,37 @@ Please provide specific modifications to achieve the user's request.`;
       if (data.usage) {
         console.log(`📊 [GPT-5 TOKENS] Input: ${data.usage.prompt_tokens} | Output: ${data.usage.completion_tokens} | Total: ${data.usage.total_tokens}`);
         
-        // Calculate cost estimation (GPT-5 pricing - estimated)
-        const inputCost = (data.usage.prompt_tokens / 1000) * 0.01; // $0.01 per 1K input tokens (estimated)
-        const outputCost = (data.usage.completion_tokens / 1000) * 0.03; // $0.03 per 1K output tokens (estimated)
-        const totalCost = inputCost + outputCost;
-        console.log(`💰 [COST ESTIMATE] Input: $${inputCost.toFixed(4)} | Output: $${outputCost.toFixed(4)} | Total: $${totalCost.toFixed(4)}`);
+        // Calculate cost estimation (GPT-5 pricing - real prices from OpenAI)
+        const inputCost = (data.usage.prompt_tokens / 1000000) * 1.25; // $1.25 per 1M input tokens
+        const outputCost = (data.usage.completion_tokens / 1000000) * 10.00; // $10.00 per 1M output tokens
+        
+        // Check for cached tokens
+        let cachedCost = 0;
+        if (data.usage.prompt_tokens_details?.cached_tokens) {
+          cachedCost = (data.usage.prompt_tokens_details.cached_tokens / 1000000) * 0.125; // $0.125 per 1M cached tokens
+          console.log(`💾 [CACHED] ${data.usage.prompt_tokens_details.cached_tokens} tokens cached`);
+        }
+        
+        const totalCost = inputCost + outputCost + cachedCost;
+        console.log(`💰 [COST] Input: $${inputCost.toFixed(6)} | Output: $${outputCost.toFixed(6)} | Cached: $${cachedCost.toFixed(6)} | Total: $${totalCost.toFixed(6)}`);
       }
 
       // Extract content from Chat Completions API
       const content = data.choices?.[0]?.message?.content;
+      const finishReason = data.choices?.[0]?.finish_reason;
+      
+      console.log(`🔍 [DEBUG] Raw content from GPT-5:`, content);
+      console.log(`🔍 [DEBUG] Content type:`, typeof content);
+      console.log(`🔍 [DEBUG] Content length:`, content ? content.length : 'null/undefined');
+      console.log(`🔍 [DEBUG] Finish reason:`, finishReason);
+      console.log(`🔍 [DEBUG] Choices array:`, data.choices);
+      
+      if (finishReason === 'length') {
+        throw new Error('GPT-5 atingiu o limite de tokens. Tente uma análise mais simples ou aumente o limite de tokens.');
+      }
       
       if (!content || content.trim() === '') {
+        console.log(`❌ [DEBUG] Content is empty or null. Full response data:`, JSON.stringify(data, null, 2));
         throw new Error('Resposta vazia da API OpenAI');
       }
 

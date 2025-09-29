@@ -3,16 +3,13 @@ const path = require('path');
 
 module.exports = {
   mode: 'development',
-  devtool: false,
   entry: {
     code: './src/code.ts',
     ui: './src/ui.ts'
   },
   output: {
     filename: '[name].js',
-    path: path.resolve(__dirname, 'dist'),
-    globalObject: 'this',
-    uniqueName: 'figma-ai-assistant'
+    path: path.resolve(__dirname, 'dist')
   },
   module: {
     rules: [
@@ -29,9 +26,6 @@ module.exports = {
   },
   resolve: {
     extensions: ['.ts', '.js']
-  },
-  externals: {
-    'figma': 'figma'
   },
   plugins: [
     new HtmlWebpackPlugin({

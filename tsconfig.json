@@ -10,7 +10,7 @@
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "module": "es2015",
+    "module": "commonjs",
     "outDir": "dist"
   },
   "include": ["src/**/*"],

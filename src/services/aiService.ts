@@ -45,7 +45,7 @@ ${JSON.stringify(structure, null, 2)}
 Please analyze this design and provide specific suggestions for improvement.`;
 
     const requestBody = {
-      model: 'gpt-4o',
+      model: 'gpt-5',
       messages: [
         {
           role: 'system',
@@ -68,7 +68,9 @@ Please analyze this design and provide specific suggestions for improvement.`;
         }
       ],
       response_format: { type: "json_object" },
-      max_tokens: 2000
+      verbosity: "medium",
+      reasoning_effort: "minimal",
+      max_completion_tokens: 2000
     };
 
     console.log(`📤 [API-${Date.now() - apiStartTime}ms] Sending request to OpenAI Chat Completions API...`);
@@ -106,6 +108,11 @@ Please analyze this design and provide specific suggestions for improvement.`;
       const data = await response.json() as any;
       console.log(`✅ [API-${Date.now() - apiStartTime}ms] OpenAI returned data`);
 
+      // Log token usage
+      if (data.usage) {
+        console.log(`📊 [TOKENS] Input: ${data.usage.prompt_tokens} | Output: ${data.usage.completion_tokens} | Total: ${data.usage.total_tokens}`);
+      }
+
       // Extract content from Chat Completions API
       const content = data.choices?.[0]?.message?.content;
       
@@ -132,10 +139,10 @@ Please analyze this design and provide specific suggestions for improvement.`;
     }
   }
 
-  // Obtém modificações da IA usando OpenAI API
+  // Obtém modificações da IA usando OpenAI API GPT-5
   static async getAIModifications(designAnalysis: any, prompt: string, types: string[], apiKey: string) {
     const apiStartTime = Date.now();
-    console.log(`🤖 [API-${apiStartTime}] Starting design modification with GPT-5-MINI...`);
+    console.log(`🤖 [API-${apiStartTime}] Starting design modification with GPT-5...`);
     
     const systemPrompt = `You are an expert UI/UX designer and developer. You will receive design data from Figma and a user prompt for modifications.
 
@@ -193,18 +200,27 @@ Modification Types Requested: ${types.join(', ')}
 Please provide specific modifications to achieve the user's request.`;
 
     const requestBody = {
-      model: 'gpt-5-mini',
-      reasoning: { effort: 'medium' },
-      input: inputMessage,
-      text: {
-        format: { type: "json_object" }
-      }
+      model: 'gpt-5',
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt
+        },
+        {
+          role: 'user',
+          content: inputMessage
+        }
+      ],
+      response_format: { type: "json_object" },
+      verbosity: "medium",
+      reasoning_effort: "minimal",
+      max_completion_tokens: 2000
     };
 
-    console.log(`📤 [API-${Date.now() - apiStartTime}ms] Sending request to OpenAI Responses API...`);
+    console.log(`📤 [API-${Date.now() - apiStartTime}ms] Sending request to OpenAI Chat Completions API...`);
 
     try {
-      const response = await fetch('https://api.openai.com/v1/responses', {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -234,36 +250,27 @@ Please provide specific modifications to achieve the user's request.`;
       }
 
       const data = await response.json() as any;
-      console.log(`✅ [API-${Date.now() - apiStartTime}ms] GPT-5-MINI returned data keys:`, Object.keys(data));
+      console.log(`✅ [API-${Date.now() - apiStartTime}ms] GPT-5 returned data`);
 
-      // Extract modification content from Responses API
-      let modificationContentRaw: string | undefined = undefined;
-
-      if (data.output && Array.isArray(data.output) && data.output.length > 1) {
-        const messageOutput = data.output[1];
-        if (messageOutput && messageOutput.content && Array.isArray(messageOutput.content) && messageOutput.content.length > 0) {
-          const contentItem = messageOutput.content[0];
-          if (contentItem && contentItem.text) {
-            modificationContentRaw = contentItem.text;
-          }
-        }
+      // Log token usage for GPT-5
+      if (data.usage) {
+        console.log(`📊 [GPT-5 TOKENS] Input: ${data.usage.prompt_tokens} | Output: ${data.usage.completion_tokens} | Total: ${data.usage.total_tokens}`);
+        
+        // Calculate cost estimation (GPT-5 pricing - estimated)
+        const inputCost = (data.usage.prompt_tokens / 1000) * 0.01; // $0.01 per 1K input tokens (estimated)
+        const outputCost = (data.usage.completion_tokens / 1000) * 0.03; // $0.03 per 1K output tokens (estimated)
+        const totalCost = inputCost + outputCost;
+        console.log(`💰 [COST ESTIMATE] Input: $${inputCost.toFixed(4)} | Output: $${outputCost.toFixed(4)} | Total: $${totalCost.toFixed(4)}`);
       }
 
-      if (!modificationContentRaw && data.output && Array.isArray(data.output) && data.output.length > 0) {
-        const firstOutput = data.output[0];
-        if (firstOutput && firstOutput.content && Array.isArray(firstOutput.content) && firstOutput.content.length > 0) {
-          const contentItem = firstOutput.content[0];
-          if (contentItem && contentItem.text) {
-            modificationContentRaw = contentItem.text;
-          }
-        }
-      }
-
-      if (!modificationContentRaw || modificationContentRaw.trim() === '') {
+      // Extract content from Chat Completions API
+      const content = data.choices?.[0]?.message?.content;
+      
+      if (!content || content.trim() === '') {
         throw new Error('Resposta vazia da API OpenAI');
       }
 
-      const modificationsJson = JSON.parse(modificationContentRaw);
+      const modificationsJson = JSON.parse(content);
 
       if (typeof modificationsJson !== 'object' || modificationsJson === null) {
         throw new Error('A resposta da API não é um JSON válido.');

@@ -79,6 +79,36 @@ figma.ui.onmessage = async (msg) => {
     } else if (msg.type === 'modify-design') {
       await DesignModificationHandler.handleDesignModification(msg);
     
+    } else if (msg.type === 'analyze-design-only') {
+      console.log('📊 Starting design analysis only...');
+      
+      // Verifica se há elementos selecionados
+      const selection = figma.currentPage.selection;
+      if (selection.length === 0) {
+        figma.notify('❌ Select at least one element first!', { timeout: 3000 });
+        figma.ui.postMessage({
+          type: 'error',
+          message: 'No elements selected'
+        });
+        return;
+      }
+      
+      console.log('📊 Analyzing selected elements:', selection.length);
+      
+      // Importa o handler para usar o método de análise
+      const { DesignModificationHandler } = await import('./handlers/designModificationHandler');
+      
+      // Analisa os elementos selecionados (mesmo processo usado antes de enviar para AI)
+      const designAnalysis = await DesignModificationHandler.analyzeDesignForModification(selection);
+      
+      // Retorna os dados de análise para a UI
+      figma.ui.postMessage({
+        type: 'design-analysis-complete',
+        analysisData: designAnalysis
+      });
+      
+      figma.notify('📊 Design analysis completed! Check the JSON output.', { timeout: 3000 });
+      
     } else if (msg.type === 'load-settings') {
       try {
         const apiKey = await figma.clientStorage.getAsync('figma-ai-assistant-api-key') || '';

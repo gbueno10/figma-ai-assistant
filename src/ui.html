@@ -7,7 +7,7 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             padding: 0;
             margin: 0;
-            background: #ffffff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #333;
             width: 100%;
             height: 100vh;
@@ -15,62 +15,87 @@
         }
 
         .container {
-            max-width: 400px;
+            max-width: 420px;
             margin: 0 auto;
             height: 100vh;
             display: flex;
             flex-direction: column;
-        }
-
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid #e5e7eb;
-            background: #f9fafb;
-            margin: 0;
-            padding: 0;
-        }
-
-        .tab {
-            flex: 1;
-            padding: 12px 16px;
-            text-align: center;
-            cursor: pointer;
-            border: none;
-            background: transparent;
-            font-size: 14px;
-            font-weight: 500;
-            color: #6b7280;
-            transition: all 0.2s;
-        }
-
-        .tab.active {
-            color: #3b82f6;
             background: #ffffff;
-            border-bottom: 2px solid #3b82f6;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
 
-        .tab:hover:not(.active) {
-            background: #f3f4f6;
-            color: #374151;
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 24px 20px;
+            text-align: center;
+            position: relative;
         }
 
-        .tab-content {
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 4px;
+            background: #667eea;
+            border-radius: 2px;
+        }
+
+        .main-content {
             flex: 1;
-            padding: 20px;
+            padding: 24px 20px;
             overflow-y: auto;
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
+            background: #ffffff;
         }
 
         h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 4px;
+            font-weight: 400;
+        }
+
+        .ai-card {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+        }
+
+        .ai-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .card-title {
             font-size: 18px;
             font-weight: 600;
-            margin: 0 0 20px 0;
-            text-align: center;
-            color: #1f2937;
+            margin: 0 0 8px 0;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-description {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 16px;
+            line-height: 1.5;
         }
 
         .form-group {
@@ -110,52 +135,138 @@
 
         button {
             width: 100%;
-            padding: 12px 16px;
-            background: #3b82f6;
+            padding: 14px 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 500;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
-            transition: background-color 0.2s;
-            margin-bottom: 8px;
+            transition: all 0.3s ease;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 6px -1px rgba(102, 126, 234, 0.4);
         }
 
         button:hover {
-            background: #2563eb;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 8px -1px rgba(102, 126, 234, 0.5);
+        }
+
+        button:active {
+            transform: translateY(0);
         }
 
         button:disabled {
-            background: #9ca3af;
+            background: #94a3b8;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
 
         button.secondary {
-            background: #6b7280;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            box-shadow: 0 4px 6px -1px rgba(100, 116, 139, 0.4);
         }
 
         button.secondary:hover {
-            background: #374151;
+            box-shadow: 0 6px 8px -1px rgba(100, 116, 139, 0.5);
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .quick-actions button {
+            margin-bottom: 0;
+            font-size: 13px;
+            padding: 12px 8px;
         }
 
         .result {
             margin-top: 16px;
-            padding: 12px;
-            border-radius: 6px;
+            padding: 16px;
+            border-radius: 12px;
             font-size: 14px;
+            border: none;
         }
 
         .result.success {
-            background: #dcfce7;
-            border: 1px solid #bbf7d0;
+            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
             color: #166534;
+            border-left: 4px solid #22c55e;
         }
 
         .result.error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
+            background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
             color: #dc2626;
+            border-left: 4px solid #ef4444;
+        }
+
+        .feature-grid {
+            display: grid;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .feature-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+        }
+
+        .feature-text {
+            flex: 1;
+        }
+
+        .feature-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e293b;
+            margin: 0 0 2px 0;
+        }
+
+        .feature-desc {
+            font-size: 12px;
+            color: #64748b;
+            margin: 0;
+        }
+
+        .settings-section {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .settings-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin: 0 0 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .instruction {
@@ -176,45 +287,78 @@
         }
 
         .progress-container {
-            margin-top: 12px;
-            background: #f3f4f6;
-            border-radius: 8px;
+            margin-top: 16px;
+            background: #f1f5f9;
+            border-radius: 12px;
             overflow: hidden;
-            height: 6px;
+            height: 8px;
         }
 
         .progress-bar {
             height: 100%;
-            background: linear-gradient(90deg, #3b82f6, #1d4ed8);
-            border-radius: 8px;
-            transition: width 0.3s ease;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 12px;
+            transition: width 0.5s ease;
             width: 0%;
         }
 
         .progress-text {
-            font-size: 12px;
-            margin-top: 8px;
-            color: #374151;
+            font-size: 13px;
+            margin-top: 12px;
+            color: #475569;
+            text-align: center;
+            font-weight: 500;
         }
 
         .api-key-info {
             font-size: 11px;
-            color: #6b7280;
-            margin-top: 4px;
+            color: #64748b;
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .json-output {
-            background: #1f2937;
-            color: #f9fafb;
-            padding: 12px;
-            border-radius: 6px;
+            background: #1e293b;
+            color: #f1f5f9;
+            padding: 16px;
+            border-radius: 12px;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             font-size: 12px;
             max-height: 300px;
             overflow-y: auto;
             white-space: pre-wrap;
             word-break: break-all;
-            margin-top: 12px;
+            margin-top: 16px;
+            border: 1px solid #334155;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            margin: 4px 0 0 0;
+            opacity: 0.9;
         }
 
         .checkbox-group {
@@ -262,126 +406,91 @@
 </head>
 <body>
     <div class="container">
-        <!-- Navigation Tabs -->
-        <div class="tabs">
-            <button class="tab active" data-tab="analyze">🔍 Analisar</button>
-            <button class="tab" data-tab="modify">🎨 Modificar Design</button>
+        <!-- Header -->
+        <div class="header">
+            <h1>🤖 Figma AI Assistant</h1>
         </div>
 
-        <!-- Analyze Tab Content -->
-        <div class="tab-content active" id="analyze">
-            <h1>🔍 Análise de Design</h1>
-            
-            <div class="instruction">
-                💡 <strong>Como usar:</strong> Selecione um frame no Figma e clique em "Analisar" para extrair informações estruturadas do design.
-            </div>
-
-            <div class="button-group">
-                <button id="analyzeBtn">📊 Analisar Design</button>
-                <button id="exportBtn" class="secondary">📄 Exportar JSON</button>
-            </div>
-
-            <button id="closeBtn" class="secondary">❌ Fechar</button>
-
-            <div class="loading" id="loadingAnalyze">
-                ⏳ Analisando design...
-                <div class="progress-container">
-                    <div class="progress-bar" id="progressBarAnalyze"></div>
-                </div>
-                <div class="progress-text" id="progressTextAnalyze"></div>
-            </div>
-
-            <div id="resultAnalyze"></div>
-
-            <div id="jsonOutput" class="json-output" style="display: none;"></div>
-        </div>
-
-        <!-- Modify Design Tab Content -->
-        <div class="tab-content" id="modify">
-            <h1>🎨 Modificar Design com IA</h1>
-            
-            <div class="instruction">
-                💡 <strong>Como usar:</strong> Selecione elementos no Figma, descreva as modificações desejadas e deixe a IA transformar seu design.
-                <br><br>
-                📋 <strong>Duplicação automática:</strong> O sistema criará uma cópia dos elementos selecionados antes de aplicar as modificações, preservando o design original.
-            </div>
-
-            <form id="modifyForm">
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Settings Section -->
+            <div class="settings-section">
+                <div class="settings-title">⚙️ API Key</div>
                 <div class="form-group">
-                    <label for="apiKey">Chave API OpenAI:</label>
+                    <label for="apiKey">OpenAI API Key:</label>
                     <input type="password" id="apiKey" placeholder="sk-..." required>
                     <div class="api-key-info">
-                        🔒 Sua chave é armazenada apenas localmente
+                        🔒 Stored locally and securely
                     </div>
                 </div>
-
-                <div class="form-group">
-                    <label for="modifyPrompt">Descreva as modificações desejadas:</label>
-                    <textarea id="modifyPrompt" placeholder="Ex: Mude as cores para um esquema mais moderno, ajuste o tamanho das fontes para melhor hierarquia..." required></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label>Tipos de modificação:</label>
-                    <div class="checkbox-group">
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="modifyTypes" value="text" checked> Texto
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="modifyTypes" value="color" checked> Cores
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="modifyTypes" value="layout"> Layout
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="modifyTypes" value="style"> Estilos
-                        </label>
-                    </div>
-                </div>
-
-                <button type="submit" id="modifyBtn">
-                    🚀 Modificar com IA
-                </button>
-            </form>
-
-            <div class="loading" id="loadingModify">
-                ⏳ Modificando design...
-                <div class="progress-container">
-                    <div class="progress-bar" id="progressBarModify"></div>
-                </div>
-                <div class="progress-text" id="progressTextModify"></div>
             </div>
 
-            <div id="resultModify"></div>
+            <!-- Quick Analysis Button -->
+            <button id="analyzeBtn" class="secondary" style="margin-bottom: 20px;">
+                📊 Analyze Design (Show JSON)
+            </button>
+            <div id="jsonOutput" class="json-output" style="display: none;"></div>
+
+            <!-- AI Design Modification Card -->
+            <div class="ai-card">
+                <div class="card-title">
+                    🎨 AI Design Modification
+                </div>
+                <div class="card-description">
+                    Describe your desired changes in natural language and let AI transform your design intelligently.
+                </div>
+
+                <form id="modifyForm">
+                    <div class="form-group">
+                        <label for="modifyPrompt">Describe modifications:</label>
+                        <textarea id="modifyPrompt" placeholder="Make the design more modern, change colors to a dark theme, improve typography hierarchy..." required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Modification Types:</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="modifyTypes" value="text" checked> Text
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="modifyTypes" value="color" checked> Colors
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="modifyTypes" value="layout"> Layout
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="modifyTypes" value="style"> Styles
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="modifyBtn">
+                        🚀 Transform with AI
+                    </button>
+                </form>
+
+                <div class="loading" id="loadingModify">
+                    ⏳ Transforming design...
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBarModify"></div>
+                    </div>
+                    <div class="progress-text" id="progressTextModify"></div>
+                </div>
+
+                <div id="resultModify"></div>
+            </div>
+
+            <!-- Action Buttons -->
+            <button id="closeBtn" class="secondary">❌ Close Assistant</button>
         </div>
     </div>
 
     <script>
-        console.log('🚀 AI Design Assistant UI carregada');
+        console.log('🚀 Figma AI Assistant UI loaded');
         
         // Global variables
         let currentJsonData = null;
-
-        // Tab functionality
-        function initTabs() {
-            const tabs = document.querySelectorAll('.tab');
-            const tabContents = document.querySelectorAll('.tab-content');
-
-            tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    const targetTab = tab.dataset.tab;
-                    
-                    // Remove active class from all tabs and contents
-                    tabs.forEach(t => t.classList.remove('active'));
-                    tabContents.forEach(tc => tc.classList.remove('active'));
-                    
-                    // Add active class to clicked tab and corresponding content
-                    tab.classList.add('active');
-                    document.getElementById(targetTab).classList.add('active');
-                    
-                    console.log(`📑 Mudou para aba: ${targetTab}`);
-                });
-            });
-        }
+        let actionsCount = 0;
 
         // Settings management
         function saveSettings() {
@@ -394,7 +503,7 @@
                 }
             }, '*');
             
-            console.log('📤 Salvando configurações...');
+            console.log('📤 Saving settings...');
         }
 
         function loadSettings() {
@@ -404,47 +513,34 @@
                 }
             }, '*');
             
-            console.log('📥 Carregando configurações...');
+            console.log('📥 Loading settings...');
         }
 
-        // Analyze functionality
+        // Initialize analyze functionality
         function initAnalyze() {
             const analyzeBtn = document.getElementById('analyzeBtn');
-            const exportBtn = document.getElementById('exportBtn');
-            const closeBtn = document.getElementById('closeBtn');
 
             analyzeBtn.addEventListener('click', () => {
-                console.log('🔍 Iniciando análise...');
+                console.log('📊 Starting design analysis...');
                 
-                // Show loading
-                document.getElementById('loadingAnalyze').style.display = 'block';
                 analyzeBtn.disabled = true;
-                document.getElementById('resultAnalyze').innerHTML = '';
+                analyzeBtn.textContent = '⏳ Analyzing...';
                 document.getElementById('jsonOutput').style.display = 'none';
-                
-                // Reset progress
-                document.getElementById('progressBarAnalyze').style.width = '0%';
-                document.getElementById('progressTextAnalyze').textContent = 'Iniciando análise...';
 
                 parent.postMessage({
                     pluginMessage: {
-                        type: 'capture-and-analyze'
+                        type: 'analyze-design-only'
                     }
                 }, '*');
             });
+        }
 
-            exportBtn.addEventListener('click', () => {
-                console.log('📄 Exportando JSON...');
-                
-                parent.postMessage({
-                    pluginMessage: {
-                        type: 'export-json'
-                    }
-                }, '*');
-            });
+        // Initialize close functionality
+        function initClose() {
+            const closeBtn = document.getElementById('closeBtn');
 
             closeBtn.addEventListener('click', () => {
-                console.log('❌ Fechando plugin...');
+                console.log('❌ Closing plugin...');
                 
                 parent.postMessage({
                     pluginMessage: {
@@ -454,7 +550,7 @@
             });
         }
 
-        // Modify functionality
+        // Initialize modify functionality
         function initModify() {
             const modifyForm = document.getElementById('modifyForm');
             const modifyBtn = document.getElementById('modifyBtn');
@@ -484,7 +580,7 @@
                     .map(checkbox => checkbox.value);
 
                 if (!apiKey || !prompt || types.length === 0) {
-                    showResult('Por favor, preencha a chave API, descrição das modificações e selecione pelo menos um tipo.', 'error', 'resultModify');
+                    showResult('Please fill in the API key, modification description, and select at least one type.', 'error', 'resultModify');
                     return;
                 }
 
@@ -498,7 +594,7 @@
                 
                 // Reset progress
                 document.getElementById('progressBarModify').style.width = '0%';
-                document.getElementById('progressTextModify').textContent = 'Iniciando modificação...';
+                document.getElementById('progressTextModify').textContent = 'Starting transformation...';
 
                 // Send message to main code
                 parent.postMessage({
@@ -509,54 +605,43 @@
                         apiKey: apiKey
                     }
                 }, '*');
+
+                actionsCount++;
             });
         }
 
         // Listen to messages from main code
         window.addEventListener('message', function(event) {
             const msg = event.data.pluginMessage;
-            console.log('📨 Mensagem recebida da UI:', msg);
+            console.log('📨 Message received from UI:', msg);
             
             if (msg.type === 'settings-loaded') {
                 // Fill fields with loaded settings
                 if (msg.apiKey) {
                     document.getElementById('apiKey').value = msg.apiKey;
-                    console.log('✅ Chave API carregada');
+                    console.log('✅ API key loaded');
                 } else {
-                    console.log('⚠️ Nenhuma chave API salva');
+                    console.log('⚠️ No API key saved');
                 }
             }
-            else if (msg.type === 'analysis-complete') {
-                // Hide loading
-                document.getElementById('loadingAnalyze').style.display = 'none';
-                document.getElementById('analyzeBtn').disabled = false;
+            else if (msg.type === 'design-analysis-complete') {
+                // Show the JSON analysis for debugging
+                console.log('📊 Design analysis completed:', msg.analysisData);
                 
-                // Store data
-                currentJsonData = msg.structuredData;
+                const analyzeBtn = document.getElementById('analyzeBtn');
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = '📊 Analyze Design (Show JSON)';
                 
-                // Show result
-                showResult('✅ Análise concluída com sucesso!', 'success', 'resultAnalyze');
-                
-                // Display JSON
+                // Show JSON in output area
                 const jsonOutput = document.getElementById('jsonOutput');
-                jsonOutput.textContent = JSON.stringify(msg.structuredData, null, 2);
+                jsonOutput.innerHTML = `
+                    <strong>📊 Design Analysis JSON (sent to AI):</strong><br>
+                    <pre style="white-space: pre-wrap; word-break: break-all; margin-top: 8px;">${JSON.stringify(msg.analysisData, null, 2)}</pre>
+                `;
                 jsonOutput.style.display = 'block';
-                
-                console.log('✅ Análise concluída, JSON exibido');
-            }
-            else if (msg.type === 'json-exported') {
-                showResult('📄 JSON exportado com sucesso!', 'success', 'resultAnalyze');
-                
-                // Update displayed JSON
-                currentJsonData = msg.data;
-                const jsonOutput = document.getElementById('jsonOutput');
-                jsonOutput.textContent = JSON.stringify(msg.data, null, 2);
-                jsonOutput.style.display = 'block';
-                
-                console.log('📄 JSON exportado');
             }
             else if (msg.type === 'modify-progress') {
-                // Update progress for modify tab
+                // Update progress for modify
                 const progressBar = document.getElementById('progressBarModify');
                 const progressText = document.getElementById('progressTextModify');
                 
@@ -566,16 +651,31 @@
                 }
                 
                 progressText.textContent = msg.message;
-                console.log(`🔄 Progresso modificação: ${msg.message}`);
+                console.log(`🔄 Modification progress: ${msg.message}`);
             }
-            else if (msg.type === 'ai-modifications-received') {
-                // Show AI modifications for debugging
-                console.log('🤖 Modificações da IA recebidas:', msg.modifications);
+            else if (msg.type === 'analysis-complete') {
+                // Always show the JSON analysis when modification starts
+                console.log('🔍 Design analysis completed:', msg.structuredData);
                 
+                // Show JSON in result area
                 const resultDiv = document.getElementById('resultModify');
                 resultDiv.innerHTML = `
                     <div class="result success">
-                        <strong>🤖 Modificações da IA:</strong><br>
+                        <strong>� Design Analysis (JSON):</strong><br>
+                        <div class="json-output" style="margin-top: 8px; display: block;">
+                            ${JSON.stringify(msg.structuredData, null, 2)}
+                        </div>
+                    </div>
+                `;
+            }
+            else if (msg.type === 'ai-modifications-received') {
+                // Show AI modifications for debugging
+                console.log('🤖 AI modifications received:', msg.modifications);
+                
+                const resultDiv = document.getElementById('resultModify');
+                resultDiv.innerHTML += `
+                    <div class="result success" style="margin-top: 16px;">
+                        <strong>🤖 AI Modifications:</strong><br>
                         <div class="json-output" style="margin-top: 8px;">
                             ${JSON.stringify(msg.modifications, null, 2)}
                         </div>
@@ -587,20 +687,22 @@
                 document.getElementById('loadingModify').style.display = 'none';
                 document.getElementById('modifyBtn').disabled = false;
                 
-                showResult('✅ Modificações aplicadas com sucesso!', 'success', 'resultModify');
-                console.log('✅ Modificações concluídas');
+                const resultDiv = document.getElementById('resultModify');
+                resultDiv.innerHTML += `
+                    <div class="result success" style="margin-top: 16px;">
+                        ✅ Modifications applied successfully!
+                    </div>
+                `;
+                console.log('✅ Modifications completed');
             }
             else if (msg.type === 'error') {
-                // Hide loading for both tabs
-                document.getElementById('loadingAnalyze').style.display = 'none';
+                // Hide loading
                 document.getElementById('loadingModify').style.display = 'none';
-                document.getElementById('analyzeBtn').disabled = false;
                 document.getElementById('modifyBtn').disabled = false;
                 
-                // Show error in both result areas
-                showResult(`❌ ${msg.message}`, 'error', 'resultAnalyze');
+                // Show error
                 showResult(`❌ ${msg.message}`, 'error', 'resultModify');
-                console.log('❌ Erro:', msg.message);
+                console.log('❌ Error:', msg.message);
             }
         });
 
@@ -612,14 +714,14 @@
 
         // Initialize everything
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🎯 Inicializando AI Design Assistant...');
+            console.log('🎯 Initializing Figma AI Assistant...');
             
-            initTabs();
             initAnalyze();
             initModify();
+            initClose();
             loadSettings();
             
-            console.log('✅ AI Design Assistant inicializado');
+            console.log('✅ Figma AI Assistant initialized');
         });
     </script>
 </body>

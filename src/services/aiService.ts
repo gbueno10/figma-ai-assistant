@@ -179,8 +179,17 @@ CRITICAL RULES FOR COLOR MODIFICATIONS:
 - If an element has hasColor: false or empty colors array, DO NOT suggest color changes for it
 - Only modify existing fills and strokes, never create new ones
 
+CRITICAL RULES FOR TEXT FORMATTING PRESERVATION:
+- ALWAYS preserve the original text formatting and structure
+- If the original text has \\n (line breaks), maintain them in the new text
+- If the original text has multiple paragraphs separated by \\n, keep that structure
+- If the original text is a single line, keep the new text as a single line
+- Match the formatting style: if original has numbered steps with \\n, maintain that pattern
+- Preserve any intentional text structure like lists, steps, or multi-line instructions
+
 IMPORTANT FORMATTING RULES:
 - For text modifications: "newValue" must be a plain string (not an object)
+- For text with line breaks: maintain \\n characters in the exact same structural pattern
 - For color modifications: use "action": "replace" and provide hex colors like "#FF6B6B" 
 - Only suggest modifications for element IDs that actually exist in the provided data
 - Do not create fake element IDs like "new:001" - only modify existing elements
@@ -193,7 +202,7 @@ Return your response as JSON with this structure:
       "type": "text|color|layout|style",
       "action": "replace|modify",
       "currentValue": "current value description",
-      "newValue": "new_text_as_string_for_text_OR_#HEX_COLOR_for_colors",
+      "newValue": "new_text_preserving_original_\\n_structure_OR_#HEX_COLOR_for_colors",
       "reasoning": "why this change"
     }
   ],
@@ -201,11 +210,12 @@ Return your response as JSON with this structure:
 }
 
 Example valid modifications:
-- Text: {"elementId": "18:249", "type": "text", "action": "replace", "newValue": "Dar a pata"}
+- Text (single line): {"elementId": "18:249", "type": "text", "action": "replace", "newValue": "Dar a pata"}
+- Text (with line breaks): {"elementId": "18:250", "type": "text", "action": "replace", "newValue": "Step 1: Sit command\\nStep 2: Raise hand\\nStep 3: Give treat"}
 - Color (ONLY if hasColor: true): {"elementId": "18:245", "type": "color", "action": "replace", "newValue": "#F3E8FF"}
 
 Modification types you can suggest:
-- text: Change text content ONLY (newValue must be plain string)
+- text: Change text content ONLY (newValue must be plain string with preserved \\n structure)
 - color: Change existing fill/stroke colors ONLY for elements with hasColor: true (newValue must be hex color like #FF6B6B)
 - layout: Change position, size, spacing
 - style: Change border radius, effects, etc.
@@ -321,7 +331,11 @@ Please provide specific modifications to achieve the user's request.`;
 
       console.log(`✅ [API-${Date.now() - apiStartTime}ms] Modifications completed. Total API time: ${Date.now() - apiStartTime}ms`);
       
-      return modificationsJson;
+      // Return both modifications and token usage
+      return {
+        modifications: modificationsJson,
+        tokenUsage: data.usage || null
+      };
 
     } catch (error) {
       console.log(`❌ [API-${Date.now() - apiStartTime}ms] Network or parsing error:`, error);

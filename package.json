@@ -4,8 +4,13 @@
   "description": "Figma plugin that captures screenshots and structure, sends to AI for suggestions",
   "main": "dist/code.js",
   "scripts": {
-    "build": "webpack --mode=production",
-    "dev": "webpack --mode=development --watch"
+    "build": "webpack --config webpack.config.js",
+    "build:fast": "webpack --config webpack.dev.js",
+    "build:simple": "webpack --config webpack.simple.js",
+    "build:quick": "webpack --config webpack.dev.js --optimization-minimize=false",
+    "dev": "webpack --config webpack.dev.js --watch",
+    "dev:simple": "webpack --config webpack.simple.js --watch",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "figma",
@@ -20,6 +25,7 @@
     "@figma/plugin-typings": "^1.117.0",
     "@types/node": "^20.0.0",
     "css-loader": "^6.8.0",
+    "fork-ts-checker-webpack-plugin": "^9.1.0",
     "html-webpack-plugin": "^5.5.0",
     "resolve": "^1.22.10",
     "style-loader": "^3.3.0",

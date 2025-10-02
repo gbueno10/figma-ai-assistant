@@ -1,15 +1,20 @@
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
-const TerserPlugin = require('terser-webpack-plugin');
 const path = require('path');
 
 module.exports = {
-  mode: 'production',
+  mode: 'development',
   
-  // TAREFA 2: Cache do sistema de arquivos para builds mais rápidas
+  // Cache agressivo para desenvolvimento
   cache: {
-    type: 'filesystem'
+    type: 'filesystem',
+    buildDependencies: {
+      config: [__filename]
+    }
   },
+  
+  // Source maps mais rápidos para debug - inline é mais compatível com Figma
+  devtool: 'inline-source-map',
   
   entry: {
     code: './src/code.ts',
@@ -23,8 +28,15 @@ module.exports = {
         use: {
           loader: 'ts-loader',
           options: {
-            // TAREFA 1: Separar verificação de tipos da transpilação
-            transpileOnly: true
+            // Transpilação apenas - sem verificação de tipos
+            transpileOnly: true,
+            // Compilação mais rápida e compatível com Figma
+            compilerOptions: {
+              sourceMap: true,
+              skipLibCheck: true,
+              module: 'commonjs',
+              target: 'es2017'
+            }
           }
         },
         exclude: /node_modules/
@@ -43,6 +55,7 @@ module.exports = {
   output: {
     filename: '[name].js',
     path: path.resolve(__dirname, 'dist'),
+    clean: false, // Não limpa o dist toda vez
     // Configuração crucial para Figma plugins
     library: {
       type: 'commonjs2'
@@ -50,19 +63,11 @@ module.exports = {
     globalObject: 'this'
   },
   
-  // TAREFA 3: Otimizar minificação com paralelização
+  // Otimizações para desenvolvimento
   optimization: {
-    minimize: true,
-    minimizer: [
-      new TerserPlugin({
-        parallel: true,
-        terserOptions: {
-          compress: {
-            drop_console: false // Manter console.log para debug
-          }
-        }
-      })
-    ]
+    minimize: false,
+    splitChunks: false,
+    runtimeChunk: false
   },
   
   plugins: [
@@ -73,13 +78,14 @@ module.exports = {
       inject: false,
       minify: false
     }),
-    // TAREFA 1: Verificação de tipos em paralelo
+    // Verificação de tipos em paralelo (pode ser desabilitada para mais velocidade)
     new ForkTsCheckerWebpackPlugin({
       typescript: {
         diagnosticOptions: {
           semantic: true,
           syntactic: true
-        }
+        },
+        mode: 'write-references' // Modo mais rápido
       }
     })
   ]

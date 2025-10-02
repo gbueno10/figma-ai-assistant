@@ -7,9 +7,10 @@ import { AIService } from '../services/aiService';
 export class DesignModificationHandler {
   
   // Handler principal para modificação de design
-  static async handleDesignModification(msg: any) {
+  static async handleDesignModification(prompt: string, types: string[], apiKey: string) {
     const startTime = Date.now();
     console.log(`🎨 [${new Date().toISOString()}] Starting design modification process...`);
+    console.log(`🎯 Modification types selected:`, types);
     
     try {
       // Step 1: Validate selection
@@ -34,9 +35,9 @@ export class DesignModificationHandler {
         totalSteps: 4
       });
 
-      // Step 2: Analyze current design state
+      // Step 2: Analyze current design state (passing types)
       console.log(`⏱️ [${Date.now() - startTime}ms] Step 2: Analyzing design state...`);
-      const designAnalysis = await this.analyzeDesignForModification(selectedNodes);
+      const designAnalysis = await this.analyzeDesignForModification(selectedNodes, types);
       
       // Progress update
       figma.ui.postMessage({
@@ -48,7 +49,9 @@ export class DesignModificationHandler {
 
       // Step 3: Get AI modifications
       console.log(`⏱️ [${Date.now() - startTime}ms] Step 3: Getting AI modifications...`);
-      const aiModifications = await AIService.getAIModifications(designAnalysis, msg.prompt, msg.types, msg.apiKey);
+      const aiResponse = await AIService.getAIModifications(designAnalysis, prompt, types, apiKey);
+      const aiModifications = aiResponse.modifications || aiResponse; // Support both new and old format
+      const tokenUsage = aiResponse.tokenUsage;
       
       // Send modifications to UI for debugging
       figma.ui.postMessage({
@@ -105,6 +108,30 @@ export class DesignModificationHandler {
         type: 'modification-complete'
       });
 
+      // Print final token usage summary
+      if (tokenUsage) {
+        console.log(`📊 ===== RESUMO FINAL DE TOKENS =====`);
+        console.log(`📥 Tokens de Input: ${tokenUsage.prompt_tokens?.toLocaleString() || 'N/A'}`);
+        console.log(`📤 Tokens de Output: ${tokenUsage.completion_tokens?.toLocaleString() || 'N/A'}`);
+        console.log(`📊 Total de Tokens: ${tokenUsage.total_tokens?.toLocaleString() || 'N/A'}`);
+        
+        if (tokenUsage.prompt_tokens_details?.cached_tokens) {
+          console.log(`💾 Tokens Cached: ${tokenUsage.prompt_tokens_details.cached_tokens.toLocaleString()}`);
+        }
+        
+        // Calculate and display cost
+        const inputCost = (tokenUsage.prompt_tokens / 1000000) * 1.25;
+        const outputCost = (tokenUsage.completion_tokens / 1000000) * 10.00;
+        let cachedCost = 0;
+        if (tokenUsage.prompt_tokens_details?.cached_tokens) {
+          cachedCost = (tokenUsage.prompt_tokens_details.cached_tokens / 1000000) * 0.125;
+        }
+        const totalCost = inputCost + outputCost + cachedCost;
+        
+        console.log(`💰 Custo Total: $${totalCost.toFixed(6)} USD`);
+        console.log(`📊 ================================`);
+      }
+
       figma.notify(`✅ Modificações aplicadas com sucesso em ${selectedNodes.length} elemento(s)!`);
       console.log(`🎉 [${Date.now() - startTime}ms] Design modification completed successfully`);
 
@@ -118,7 +145,7 @@ export class DesignModificationHandler {
   }
 
   // Analyze design for modification
-  static async analyzeDesignForModification(nodes: readonly SceneNode[]): Promise<DesignAnalysis> {
+  static async analyzeDesignForModification(nodes: readonly SceneNode[], types: string[]): Promise<DesignAnalysis> {
     const analysis: DesignAnalysis = {
       elements: [],
       totalElements: 0,
@@ -128,7 +155,7 @@ export class DesignModificationHandler {
     };
 
     for (const node of nodes) {
-      const element = this.analyzeNodeForModification(node);
+      const element = this.analyzeNodeForModification(node, types);
       analysis.elements.push(element);
     }
 
@@ -247,73 +274,90 @@ export class DesignModificationHandler {
     return updatedModifications;
   }
 
-  // Analyze individual node for modification
-  static analyzeNodeForModification(node: SceneNode): any {
+  // Analyze individual node for modification with conditional property inclusion
+  static analyzeNodeForModification(node: SceneNode, types: string[]): any {
+    // Propriedades base que são sempre necessárias
     const element: any = {
       id: node.id,
       name: node.name,
       type: node.type,
-      x: node.x,
-      y: node.y,
-      width: node.width,
-      height: node.height,
-      hasColor: false,
-      colors: [],
-      text: null,
       children: []
     };
 
-    // Analyze text
-    if (node.type === 'TEXT') {
+    // --- Início da Lógica Condicional ---
+
+    // Adiciona dados de LAYOUT
+    if (types.includes('layout')) {
+      element.x = node.x;
+      element.y = node.y;
+      element.width = node.width;
+      element.height = node.height;
+    }
+
+    // Adiciona dados de TEXTO
+    if (types.includes('text') && node.type === 'TEXT') {
       const textNode = node as TextNode;
       element.text = textNode.characters;
       element.fontSize = textNode.fontSize;
       element.fontName = textNode.fontName;
     }
 
-    // Analyze colors - only mark as hasColor if element actually has visible fills
-    if ('fills' in node && node.fills && Array.isArray(node.fills) && node.fills.length > 0) {
-      const fills = node.fills as Paint[];
-      const visibleFills = fills.filter(fill => fill.visible !== false);
-      
-      for (const fill of visibleFills) {
-        if (fill.type === 'SOLID') {
+    // Adiciona dados de COR
+    if (types.includes('color')) {
+      element.hasColor = false; // Começa como falso
+      element.colors = [];
+
+      // Lógica para 'fills'
+      if ('fills' in node && Array.isArray(node.fills) && node.fills.length > 0) {
+        const visibleFills = node.fills.filter(fill => fill.visible !== false && fill.type === 'SOLID');
+        if (visibleFills.length > 0) {
           element.hasColor = true;
-          element.colors.push({
-            type: 'fill',
-            color: fill.color,
-            opacity: fill.opacity || 1
-          });
+          for (const fill of visibleFills) {
+            element.colors.push({
+              type: 'fill',
+              color: (fill as SolidPaint).color,
+              opacity: (fill as SolidPaint).opacity || 1
+            });
+          }
         }
       }
-    }
-
-    // Analyze strokes - only consider visible strokes with actual width
-    if ('strokes' in node && node.strokes && Array.isArray(node.strokes) && node.strokes.length > 0) {
-      const strokeWeight = 'strokeWeight' in node ? (typeof node.strokeWeight === 'number' ? node.strokeWeight : 0) : 0;
       
-      if (strokeWeight > 0) {
-        const strokes = node.strokes as Paint[];
-        const visibleStrokes = strokes.filter(stroke => stroke.visible !== false);
-        
-        for (const stroke of visibleStrokes) {
-          if (stroke.type === 'SOLID') {
+      // Lógica para 'strokes'
+      if ('strokes' in node && Array.isArray(node.strokes) && node.strokes.length > 0) {
+        const strokeWeight = 'strokeWeight' in node ? (node as any).strokeWeight : 0;
+        if (strokeWeight > 0) {
+          const visibleStrokes = node.strokes.filter(stroke => stroke.visible !== false && stroke.type === 'SOLID');
+          if (visibleStrokes.length > 0) {
             element.hasColor = true;
-            element.colors.push({
-              type: 'stroke',
-              color: stroke.color,
-              opacity: stroke.opacity || 1,
-              strokeWeight: strokeWeight
-            });
+            for (const stroke of visibleStrokes) {
+              element.colors.push({
+                type: 'stroke',
+                color: (stroke as SolidPaint).color,
+                opacity: (stroke as SolidPaint).opacity || 1,
+                strokeWeight: strokeWeight
+              });
+            }
           }
         }
       }
     }
 
-    // Analyze children recursively
+    // Adiciona dados de ESTILO
+    if (types.includes('style')) {
+      if ('cornerRadius' in node) {
+        element.cornerRadius = (node as any).cornerRadius;
+      }
+      if ('effects' in node && (node as any).effects.length > 0) {
+        element.effects = (node as any).effects;
+      }
+    }
+    
+    // --- Fim da Lógica Condicional ---
+
+    // Analisa filhos recursivamente, passando 'types' adiante
     if ('children' in node) {
       for (const child of node.children) {
-        element.children.push(this.analyzeNodeForModification(child));
+        element.children.push(this.analyzeNodeForModification(child, types));
       }
     }
 

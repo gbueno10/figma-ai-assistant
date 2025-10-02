@@ -77,7 +77,7 @@ figma.ui.onmessage = async (msg) => {
     } else if (msg.type === 'cancel') {
       figma.closePlugin();
     } else if (msg.type === 'modify-design') {
-      await DesignModificationHandler.handleDesignModification(msg);
+      await DesignModificationHandler.handleDesignModification(msg.prompt, msg.types, msg.apiKey);
     
     } else if (msg.type === 'analyze-design-only') {
       console.log('📊 Starting design analysis only...');
@@ -98,8 +98,8 @@ figma.ui.onmessage = async (msg) => {
       // Importa o handler para usar o método de análise
       const { DesignModificationHandler } = await import('./handlers/designModificationHandler');
       
-      // Analisa os elementos selecionados (mesmo processo usado antes de enviar para AI)
-      const designAnalysis = await DesignModificationHandler.analyzeDesignForModification(selection);
+      // Analisa os elementos selecionados (usando todos os tipos para debug)
+      const designAnalysis = await DesignModificationHandler.analyzeDesignForModification(selection, ['text', 'color', 'layout', 'style']);
       
       // Retorna os dados de análise para a UI
       figma.ui.postMessage({
@@ -199,28 +199,28 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       
       figma.ui.postMessage({
         type: 'image-progress',
-        message: `Starting regeneration of ${imageNodes.length} image(s)...`,
+        message: `Starting parallel regeneration of ${imageNodes.length} image(s)...`,
         step: 1,
-        totalSteps: imageNodes.length + 1
+        totalSteps: 3
       });
       
-      for (let i = 0; i < imageNodes.length; i++) {
-        const node = imageNodes[i];
-        
-        figma.ui.postMessage({
-          type: 'image-progress',
-          message: `Processing image ${i + 1}/${imageNodes.length}: ${node.name}`,
-          step: i + 2,
-          totalSteps: imageNodes.length + 1
-        });
-        
+      // PROCESSAMENTO EM PARALELO - Geração de todas as imagens simultaneamente
+      const regenerationPromises = imageNodes.map(async (node, index) => {
         try {
+          console.log(`🔄 [PARALLEL] Starting regeneration ${index + 1}/${imageNodes.length}: ${node.name}`);
+          
           // Extrai a imagem atual
           const imageFill = (node as any).fills.find((fill: any) => fill.type === 'IMAGE');
-          if (!imageFill) continue;
+          if (!imageFill) {
+            console.log(`⚠️ [PARALLEL] No image fill found for ${node.name}`);
+            return { success: false, node, error: 'No image fill found' };
+          }
           
           const image = figma.getImageByHash(imageFill.imageHash);
-          if (!image) continue;
+          if (!image) {
+            console.log(`⚠️ [PARALLEL] Image hash not found for ${node.name}`);
+            return { success: false, node, error: 'Image hash not found' };
+          }
           
           const imageBytes = await image.getBytesAsync();
           
@@ -229,26 +229,71 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
           if (msg.prompt && msg.prompt.trim()) {
             // Usa prompt customizado
             newImageBytes = await ImageGenerationService.generateImageAsBase64(msg.prompt, msg.apiKey, msg.size);
+            console.log(`✅ [PARALLEL] Custom prompt generated for ${node.name}`);
           } else {
             // Regenera baseado na análise da imagem atual
             newImageBytes = await ImageGenerationService.regenerateImage(imageBytes, msg.apiKey);
+            console.log(`✅ [PARALLEL] Auto-regenerated ${node.name}`);
           }
           
-          // Substitui a imagem
-          await ImageGenerationService.replaceImageInFigma(node, newImageBytes);
+          return { success: true, node, newImageBytes, error: null };
           
         } catch (error) {
-          console.log(`❌ Error regenerating image ${node.name}:`, error);
-          figma.notify(`⚠️ Failed to regenerate ${node.name}: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
+          console.log(`❌ [PARALLEL] Error generating image for ${node.name}:`, error);
+          return { success: false, node, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+      });
+      
+      figma.ui.postMessage({
+        type: 'image-progress',
+        message: `Generating ${imageNodes.length} images in parallel...`,
+        step: 2,
+        totalSteps: 3
+      });
+      
+      // Aguarda todas as gerações terminarem
+      const results = await Promise.all(regenerationPromises);
+      
+      figma.ui.postMessage({
+        type: 'image-progress',
+        message: `Applying generated images to Figma...`,
+        step: 3,
+        totalSteps: 3
+      });
+      
+      // Aplica as imagens geradas sequencialmente (interação com Figma deve ser sequencial)
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const result of results) {
+        if (result.success && result.newImageBytes) {
+          try {
+            await ImageGenerationService.replaceImageInFigma(result.node, result.newImageBytes);
+            successCount++;
+            console.log(`✅ [APPLY] Successfully applied image to ${result.node.name}`);
+          } catch (error) {
+            console.log(`❌ [APPLY] Error applying image to ${result.node.name}:`, error);
+            figma.notify(`⚠️ Failed to apply ${result.node.name}: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 3000 });
+            errorCount++;
+          }
+        } else {
+          console.log(`❌ [RESULT] Failed result for ${result.node.name}: ${result.error}`);
+          figma.notify(`⚠️ Failed to regenerate ${result.node.name}: ${result.error}`, { timeout: 3000 });
+          errorCount++;
         }
       }
       
+      const message = errorCount > 0 
+        ? `Regenerated ${successCount}/${imageNodes.length} image(s) (${errorCount} failed)`
+        : `Successfully regenerated all ${successCount} image(s)!`;
+      
       figma.ui.postMessage({
         type: 'image-complete',
-        message: `Successfully regenerated ${imageNodes.length} image(s)!`
+        message: message
       });
       
-      figma.notify(`✅ Regenerated ${imageNodes.length} image(s)!`, { timeout: 3000 });
+      figma.notify(`✅ ${message}`, { timeout: 3000 });
+      console.log(`🎉 [PARALLEL] Regeneration complete: ${successCount} success, ${errorCount} errors`);
       
     } else {
       // Geração de nova imagem

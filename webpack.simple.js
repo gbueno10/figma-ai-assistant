@@ -3,7 +3,15 @@ const path = require('path');
 
 module.exports = {
   mode: 'development',
+  
+  // Cache básico
+  cache: {
+    type: 'filesystem'
+  },
+  
+  // Sem source maps para máxima compatibilidade
   devtool: false,
+  
   entry: {
     code: './src/code.ts',
     ui: './src/ui.ts'

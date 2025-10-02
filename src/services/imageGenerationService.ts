@@ -2,6 +2,119 @@
 
 export class ImageGenerationService {
   
+  // Analisa uma imagem existente e gera prompt para regeneração
+  static async analyzeImageForRegeneration(imageBytes: Uint8Array, apiKey: string): Promise<string> {
+    const apiStartTime = Date.now();
+    console.log(`🔍 [ANALYZE-${apiStartTime}] Analyzing image for regeneration...`);
+    
+    // Converte imagem para base64
+    const base64Image = this.uint8ArrayToBase64(imageBytes);
+    
+    const systemPrompt = `You are an expert image analyst. Analyze the provided image and create a detailed, creative prompt that could be used to regenerate a similar image using DALL-E.
+
+Focus on:
+- Main subject and composition
+- Art style and visual aesthetic
+- Colors and lighting
+- Mood and atmosphere
+- Important details and elements
+
+Return a single, well-crafted prompt (not JSON) that captures the essence of the image for regeneration.`;
+
+    const requestBody = {
+      model: 'gpt-4o', // Melhor modelo para análise de imagem
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Analyze this image and create a detailed prompt for regenerating a similar image:'
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 500
+    };
+
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro ao analisar imagem: ${response.status}`);
+      }
+
+      const data = await response.json() as any;
+      const prompt = data.choices?.[0]?.message?.content?.trim();
+      
+      if (!prompt) {
+        throw new Error('Falha ao gerar prompt da análise da imagem');
+      }
+
+      console.log(`✅ [ANALYZE-${Date.now() - apiStartTime}ms] Image analyzed. Generated prompt: "${prompt}"`);
+      
+      return prompt;
+
+    } catch (error) {
+      console.log(`❌ [ANALYZE-${Date.now() - apiStartTime}ms] Error analyzing image:`, error);
+      throw error;
+    }
+  }
+
+  // Regenera uma imagem baseada na análise de uma imagem existente
+  static async regenerateImage(imageBytes: Uint8Array, apiKey: string, customPrompt?: string): Promise<Uint8Array> {
+    console.log(`🔄 [REGENERATE] Starting image regeneration...`);
+    
+    try {
+      let prompt: string;
+      
+      if (customPrompt) {
+        prompt = customPrompt;
+        console.log(`📝 [REGENERATE] Using custom prompt: "${prompt}"`);
+      } else {
+        // Analisa a imagem para gerar prompt
+        prompt = await this.analyzeImageForRegeneration(imageBytes, apiKey);
+        console.log(`🤖 [REGENERATE] Generated prompt from analysis: "${prompt}"`);
+      }
+      
+      // Gera nova imagem baseada no prompt
+      const newImageBytes = await this.generateImageAsBase64(prompt, apiKey);
+      
+      console.log(`✅ [REGENERATE] Image regenerated successfully`);
+      return newImageBytes;
+      
+    } catch (error) {
+      console.log(`❌ [REGENERATE] Regeneration error:`, error);
+      throw error;
+    }
+  }
+
+  // Converte Uint8Array para base64
+  static uint8ArrayToBase64(uint8Array: Uint8Array): string {
+    let binaryString = '';
+    for (let i = 0; i < uint8Array.length; i++) {
+      binaryString += String.fromCharCode(uint8Array[i]);
+    }
+    return btoa(binaryString);
+  }
+
   // Gera uma nova imagem usando OpenAI API (retorna URL)
   static async generateImage(prompt: string, apiKey: string, size: string = "1024x1024"): Promise<string> {
     console.log(`🎨 [IMAGE-GEN] Starting image generation with prompt: "${prompt}"`);
@@ -16,11 +129,12 @@ export class ImageGenerationService {
           "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "gpt-image-1", // Modelo mais recente da OpenAI (atualizado)
+          model: "gpt-image-1", // Modelo do seu exemplo
           prompt: prompt,
           size: size, // "1024x1024", "1024x1792", "1792x1024"
           quality: "standard", // "standard" ou "hd"
           n: 1, // quantidade de imagens
+          response_format: "b64_json" // Força base64 como no seu exemplo
         }),
       });
 

@@ -431,6 +431,58 @@
             </button>
             <div id="jsonOutput" class="json-output" style="display: none;"></div>
 
+            <!-- AI Image Generation Card -->
+            <div class="ai-card">
+                <div class="card-title">
+                    🎨 AI Image Generation
+                </div>
+                <div class="card-description">
+                    Generate new images or regenerate selected images using AI. Select one or more images to regenerate, or create new ones.
+                </div>
+
+                <div class="quick-actions">
+                    <button id="generateNewBtn" type="button">
+                        ✨ New Image
+                    </button>
+                    <button id="regenerateBtn" type="button">
+                        🔄 Regenerate Selected
+                    </button>
+                </div>
+
+                <form id="imageForm" style="display: none;">
+                    <div class="form-group">
+                        <label for="imagePrompt">Image description:</label>
+                        <textarea id="imagePrompt" placeholder="A children's book drawing of a veterinarian using a stethoscope to listen to the heartbeat of a baby otter..." required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="imageSize">Size:</label>
+                        <select id="imageSize">
+                            <option value="1024x1024">Square (1024x1024)</option>
+                            <option value="1024x1792">Portrait (1024x1792)</option>
+                            <option value="1792x1024">Landscape (1792x1024)</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" id="generateBtn">
+                        🚀 Generate Image
+                    </button>
+                    <button type="button" id="cancelImageBtn" class="secondary">
+                        ❌ Cancel
+                    </button>
+                </form>
+
+                <div class="loading" id="loadingImage">
+                    ⏳ Generating image...
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBarImage"></div>
+                    </div>
+                    <div class="progress-text" id="progressTextImage"></div>
+                </div>
+
+                <div id="resultImage"></div>
+            </div>
+
             <!-- AI Design Modification Card -->
             <div class="ai-card">
                 <div class="card-title">
@@ -516,7 +568,81 @@
             console.log('📥 Loading settings...');
         }
 
-        // Initialize analyze functionality
+        // Initialize image generation functionality
+        function initImageGeneration() {
+            const generateNewBtn = document.getElementById('generateNewBtn');
+            const regenerateBtn = document.getElementById('regenerateBtn');
+            const imageForm = document.getElementById('imageForm');
+            const cancelImageBtn = document.getElementById('cancelImageBtn');
+            const generateBtn = document.getElementById('generateBtn');
+
+            generateNewBtn.addEventListener('click', () => {
+                console.log('✨ Starting new image generation...');
+                imageForm.style.display = 'block';
+                document.getElementById('imagePrompt').value = '';
+                document.getElementById('imagePrompt').placeholder = 'A children\'s book drawing of a veterinarian using a stethoscope to listen to the heartbeat of a baby otter...';
+                generateBtn.textContent = '✨ Generate New Image';
+                generateBtn.dataset.mode = 'new';
+            });
+
+            regenerateBtn.addEventListener('click', () => {
+                console.log('🔄 Starting image regeneration...');
+                
+                const apiKey = document.getElementById('apiKey').value;
+                if (!apiKey) {
+                    showResult('Please enter your OpenAI API key first.', 'error', 'resultImage');
+                    return;
+                }
+
+                // Check if images are selected
+                parent.postMessage({
+                    pluginMessage: {
+                        type: 'check-image-selection'
+                    }
+                }, '*');
+            });
+
+            cancelImageBtn.addEventListener('click', () => {
+                imageForm.style.display = 'none';
+                document.getElementById('resultImage').innerHTML = '';
+            });
+
+            imageForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const apiKey = document.getElementById('apiKey').value;
+                const prompt = document.getElementById('imagePrompt').value;
+                const size = document.getElementById('imageSize').value;
+                const mode = generateBtn.dataset.mode || 'new';
+
+                if (!apiKey || !prompt) {
+                    showResult('Please fill in the API key and image description.', 'error', 'resultImage');
+                    return;
+                }
+
+                // Save settings
+                saveSettings();
+
+                // Show loading
+                document.getElementById('loadingImage').style.display = 'block';
+                generateBtn.disabled = true;
+                document.getElementById('resultImage').innerHTML = '';
+                
+                // Reset progress
+                document.getElementById('progressBarImage').style.width = '0%';
+                document.getElementById('progressTextImage').textContent = 'Starting image generation...';
+
+                // Send message to main code
+                parent.postMessage({
+                    pluginMessage: {
+                        type: mode === 'new' ? 'generate-image' : 'regenerate-images',
+                        prompt: prompt,
+                        size: size,
+                        apiKey: apiKey
+                    }
+                }, '*');
+            });
+        }
         function initAnalyze() {
             const analyzeBtn = document.getElementById('analyzeBtn');
 
@@ -682,6 +808,52 @@
                     </div>
                 `;
             }
+            else if (msg.type === 'image-selection-checked') {
+                const imageForm = document.getElementById('imageForm');
+                const generateBtn = document.getElementById('generateBtn');
+                
+                if (msg.hasImages && msg.count > 0) {
+                    // Show form for regeneration
+                    imageForm.style.display = 'block';
+                    document.getElementById('imagePrompt').value = '';
+                    document.getElementById('imagePrompt').placeholder = `Regenerate ${msg.count} selected image(s). Leave empty to auto-analyze, or describe custom changes...`;
+                    generateBtn.textContent = `🔄 Regenerate ${msg.count} Image(s)`;
+                    generateBtn.dataset.mode = 'regenerate';
+                    
+                    showResult(`✅ Found ${msg.count} image(s) selected. You can regenerate them or provide a custom prompt.`, 'success', 'resultImage');
+                } else {
+                    showResult('❌ No images selected. Please select one or more images in Figma to regenerate them.', 'error', 'resultImage');
+                }
+            }
+            else if (msg.type === 'image-progress') {
+                // Update progress for image generation
+                const progressBar = document.getElementById('progressBarImage');
+                const progressText = document.getElementById('progressTextImage');
+                
+                if (msg.step && msg.totalSteps) {
+                    const percentage = (msg.step / msg.totalSteps) * 100;
+                    progressBar.style.width = `${percentage}%`;
+                }
+                
+                progressText.textContent = msg.message;
+                console.log(`🎨 Image progress: ${msg.message}`);
+            }
+            else if (msg.type === 'image-complete') {
+                // Hide loading
+                document.getElementById('loadingImage').style.display = 'none';
+                document.getElementById('generateBtn').disabled = false;
+                
+                const resultDiv = document.getElementById('resultImage');
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        ✅ ${msg.message || 'Image generated successfully!'}
+                    </div>
+                `;
+                
+                // Hide form
+                document.getElementById('imageForm').style.display = 'none';
+                console.log('✅ Image generation completed');
+            }
             else if (msg.type === 'modification-complete') {
                 // Hide loading
                 document.getElementById('loadingModify').style.display = 'none';
@@ -696,12 +868,18 @@
                 console.log('✅ Modifications completed');
             }
             else if (msg.type === 'error') {
-                // Hide loading
+                // Hide loading for both modify and image
                 document.getElementById('loadingModify').style.display = 'none';
                 document.getElementById('modifyBtn').disabled = false;
+                document.getElementById('loadingImage').style.display = 'none';
+                document.getElementById('generateBtn').disabled = false;
                 
-                // Show error
-                showResult(`❌ ${msg.message}`, 'error', 'resultModify');
+                // Show error in appropriate container
+                if (msg.context === 'image') {
+                    showResult(`❌ ${msg.message}`, 'error', 'resultImage');
+                } else {
+                    showResult(`❌ ${msg.message}`, 'error', 'resultModify');
+                }
                 console.log('❌ Error:', msg.message);
             }
         });
@@ -716,6 +894,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🎯 Initializing Figma AI Assistant...');
             
+            initImageGeneration();
             initAnalyze();
             initModify();
             initClose();

@@ -488,26 +488,17 @@ export class DesignModificationHandler {
     }
   }
 
-  // Apply color modification
+  // Apply color modification with opacity preservation and stroke support
   static async applyColorModification(element: SceneNode, modification: any) {
     console.log(`🎨 [DEBUG] Applying color modification:`, modification);
     
-    if (!('fills' in element)) {
-      console.log(`❌ [DEBUG] Element does not support fills: ${element.type}`);
+    // Validate that element supports colors (fills or strokes)
+    if (!('fills' in element) && !('strokes' in element)) {
+      console.log(`❌ [DEBUG] Element does not support fills or strokes: ${element.type}`);
       return;
     }
 
-    // Check if element already has colors before applying modification
-    const currentFills = (element as any).fills as Paint[];
-    const hasExistingColors = currentFills && Array.isArray(currentFills) && 
-                              currentFills.length > 0 && 
-                              currentFills.some(fill => fill.visible !== false && fill.type === 'SOLID');
-    
-    if (!hasExistingColors) {
-      console.log(`⚠️ [DEBUG] Skipping color modification - element has no existing colors: ${element.name} (${element.id})`);
-      return;
-    }
-    
+    // Parse the new color value
     if ((modification.action === 'replace' || modification.action === 'modify') && modification.newValue) {
       console.log(`🎨 [DEBUG] Parsing color: ${modification.newValue}`);
       
@@ -524,25 +515,149 @@ export class DesignModificationHandler {
       
       const newColor = ColorUtils.parseColor(colorString);
       
-      if (newColor) {
-        const newFill: SolidPaint = {
-          type: 'SOLID',
-          color: newColor
-        };
-        
-        console.log(`🎨 [DEBUG] Applying new color:`, newColor);
-        element.fills = [newFill];
-        console.log(`✅ [DEBUG] Color successfully applied`);
-        
+      if (!newColor) {
+        console.log(`❌ [DEBUG] Failed to parse color: ${modification.newValue}`);
+        return;
+      }
+      
+      console.log(`🎨 [DEBUG] Parsed color:`, newColor);
+      
+      // TASK 1: Try to modify existing fills first (with opacity preservation)
+      let colorApplied = await this.applyColorToFills(element, newColor);
+      
+      // TASK 2: If no fill was modified, try strokes (only if strokeWeight > 0)
+      if (!colorApplied) {
+        colorApplied = await this.applyColorToStrokes(element, newColor);
+      }
+      
+      if (colorApplied) {
+        console.log(`✅ [DEBUG] Color successfully applied to ${colorApplied}`);
         // Force selection update to make change visible
         figma.currentPage.selection = [element];
-        
       } else {
-        console.log(`❌ [DEBUG] Failed to parse color: ${modification.newValue}`);
+        console.log(`⚠️ [DEBUG] No suitable fill or stroke found for color modification on element: ${element.name} (${element.id})`);
       }
+      
     } else {
       console.log(`⚠️ [DEBUG] Invalid color modification:`, modification);
     }
+  }
+
+  // TASK 1 Implementation: Apply color to fills while preserving opacity
+  static async applyColorToFills(element: SceneNode, newColor: RGB): Promise<string | null> {
+    if (!('fills' in element)) {
+      return null;
+    }
+
+    const currentFills = (element as any).fills as Paint[];
+    
+    // Validate that we have fills to work with
+    if (!currentFills || !Array.isArray(currentFills) || currentFills.length === 0) {
+      console.log(`🔍 [DEBUG] No fills found on element`);
+      return null;
+    }
+
+    // Find the first visible SOLID fill
+    const solidFillIndex = currentFills.findIndex(fill => 
+      fill.visible !== false && fill.type === 'SOLID'
+    );
+
+    if (solidFillIndex === -1) {
+      console.log(`🔍 [DEBUG] No visible solid fills found`);
+      return null;
+    }
+
+    // CRITICAL: Clone the fills array and create new objects to avoid readonly issues
+    const clonedFills = currentFills.map((fill, index) => {
+      if (index === solidFillIndex && fill.type === 'SOLID') {
+        const oldFill = fill as SolidPaint;
+        // Preserve existing opacity or default to 1
+        const existingOpacity = oldFill.opacity !== undefined ? oldFill.opacity : 1;
+        
+        console.log(`🎨 [DEBUG] Modifying fill at index ${solidFillIndex}, preserving opacity: ${existingOpacity}`);
+        
+        // Create a completely new SolidPaint object with preserved properties
+        return {
+          type: 'SOLID' as const,
+          color: newColor,
+          opacity: existingOpacity,
+          visible: oldFill.visible !== false,
+          blendMode: oldFill.blendMode || 'NORMAL'
+        } as SolidPaint;
+      }
+      // For other fills, return a shallow copy
+      return { ...fill };
+    });
+    
+    // Apply the cloned and modified fills array back to the element
+    (element as any).fills = clonedFills;
+    
+    const targetFill = currentFills[solidFillIndex] as SolidPaint;
+    const preservedOpacity = targetFill.opacity !== undefined ? targetFill.opacity : 1;
+    
+    return `fill (opacity: ${Math.round(preservedOpacity * 100)}%)`;
+  }
+
+  // TASK 2 Implementation: Apply color to strokes while preserving opacity
+  static async applyColorToStrokes(element: SceneNode, newColor: RGB): Promise<string | null> {
+    if (!('strokes' in element) || !('strokeWeight' in element)) {
+      return null;
+    }
+
+    // Check if stroke is visible (strokeWeight > 0)
+    const strokeWeight = (element as any).strokeWeight;
+    if (!strokeWeight || strokeWeight <= 0) {
+      console.log(`🔍 [DEBUG] Stroke weight is 0 or undefined, skipping stroke modification`);
+      return null;
+    }
+
+    const currentStrokes = (element as any).strokes as Paint[];
+    
+    // Validate that we have strokes to work with
+    if (!currentStrokes || !Array.isArray(currentStrokes) || currentStrokes.length === 0) {
+      console.log(`🔍 [DEBUG] No strokes found on element`);
+      return null;
+    }
+
+    // Find the first visible SOLID stroke
+    const solidStrokeIndex = currentStrokes.findIndex(stroke => 
+      stroke.visible !== false && stroke.type === 'SOLID'
+    );
+
+    if (solidStrokeIndex === -1) {
+      console.log(`🔍 [DEBUG] No visible solid strokes found`);
+      return null;
+    }
+
+    // CRITICAL: Clone the strokes array and create new objects to avoid readonly issues
+    const clonedStrokes = currentStrokes.map((stroke, index) => {
+      if (index === solidStrokeIndex && stroke.type === 'SOLID') {
+        const oldStroke = stroke as SolidPaint;
+        // Preserve existing opacity or default to 1
+        const existingOpacity = oldStroke.opacity !== undefined ? oldStroke.opacity : 1;
+        
+        console.log(`🎨 [DEBUG] Modifying stroke at index ${solidStrokeIndex}, preserving opacity: ${existingOpacity}, strokeWeight: ${strokeWeight}`);
+        
+        // Create a completely new SolidPaint object with preserved properties
+        return {
+          type: 'SOLID' as const,
+          color: newColor,
+          opacity: existingOpacity,
+          visible: oldStroke.visible !== false,
+          blendMode: oldStroke.blendMode || 'NORMAL'
+        } as SolidPaint;
+      }
+      // For other strokes, return a shallow copy
+      return { ...stroke };
+    });
+    
+    // Apply the cloned and modified strokes array back to the element
+    (element as any).strokes = clonedStrokes;
+    
+    const targetStroke = currentStrokes[solidStrokeIndex] as SolidPaint;
+    const preservedOpacity = targetStroke.opacity !== undefined ? targetStroke.opacity : 1;
+    
+    return `stroke (opacity: ${Math.round(preservedOpacity * 100)}%, weight: ${strokeWeight}px)`;
   }
 
   // Apply layout modification

@@ -130,6 +130,31 @@ figma.ui.onmessage = async (msg) => {
       } catch (error) {
         console.log('❌ Error saving settings:', error);
       }
+    
+    } else if (msg.type === 'check-image-selection') {
+      console.log('🖼️ Checking image selection...');
+      
+      const selection = figma.currentPage.selection;
+      const imageNodes = selection.filter(node => {
+        if ('fills' in node && node.fills && Array.isArray(node.fills)) {
+          return node.fills.some(fill => fill.type === 'IMAGE');
+        }
+        return false;
+      });
+      
+      figma.ui.postMessage({
+        type: 'image-selection-checked',
+        hasImages: imageNodes.length > 0,
+        count: imageNodes.length
+      });
+      
+    } else if (msg.type === 'generate-image') {
+      console.log('✨ Starting new image generation...');
+      await handleImageGeneration(msg, false);
+      
+    } else if (msg.type === 'regenerate-images') {
+      console.log('🔄 Starting image regeneration...');
+      await handleImageGeneration(msg, true);
     }
   } catch (error: any) {
     figma.notify(`❌ Erro: ${error.message}`, { timeout: 5000 });
@@ -146,6 +171,126 @@ if (selection.length > 0 && selection[0].type === "FRAME") {
     frameName: frame.name,
     elementCount: aiAssistant.countElements(frame)
   });
+}
+
+// Handler para geração e regeneração de imagens
+async function handleImageGeneration(msg: any, isRegeneration: boolean) {
+  try {
+    const { ImageGenerationService } = await import('./services/imageGenerationService');
+    
+    if (isRegeneration) {
+      // Regeneração de imagens selecionadas
+      const selection = figma.currentPage.selection;
+      const imageNodes = selection.filter(node => {
+        if ('fills' in node && node.fills && Array.isArray(node.fills)) {
+          return node.fills.some(fill => fill.type === 'IMAGE');
+        }
+        return false;
+      });
+      
+      if (imageNodes.length === 0) {
+        figma.ui.postMessage({
+          type: 'error',
+          message: 'No images selected for regeneration',
+          context: 'image'
+        });
+        return;
+      }
+      
+      figma.ui.postMessage({
+        type: 'image-progress',
+        message: `Starting regeneration of ${imageNodes.length} image(s)...`,
+        step: 1,
+        totalSteps: imageNodes.length + 1
+      });
+      
+      for (let i = 0; i < imageNodes.length; i++) {
+        const node = imageNodes[i];
+        
+        figma.ui.postMessage({
+          type: 'image-progress',
+          message: `Processing image ${i + 1}/${imageNodes.length}: ${node.name}`,
+          step: i + 2,
+          totalSteps: imageNodes.length + 1
+        });
+        
+        try {
+          // Extrai a imagem atual
+          const imageFill = (node as any).fills.find((fill: any) => fill.type === 'IMAGE');
+          if (!imageFill) continue;
+          
+          const image = figma.getImageByHash(imageFill.imageHash);
+          if (!image) continue;
+          
+          const imageBytes = await image.getBytesAsync();
+          
+          let newImageBytes: Uint8Array;
+          
+          if (msg.prompt && msg.prompt.trim()) {
+            // Usa prompt customizado
+            newImageBytes = await ImageGenerationService.generateImageAsBase64(msg.prompt, msg.apiKey, msg.size);
+          } else {
+            // Regenera baseado na análise da imagem atual
+            newImageBytes = await ImageGenerationService.regenerateImage(imageBytes, msg.apiKey);
+          }
+          
+          // Substitui a imagem
+          await ImageGenerationService.replaceImageInFigma(node, newImageBytes);
+          
+        } catch (error) {
+          console.log(`❌ Error regenerating image ${node.name}:`, error);
+          figma.notify(`⚠️ Failed to regenerate ${node.name}: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
+        }
+      }
+      
+      figma.ui.postMessage({
+        type: 'image-complete',
+        message: `Successfully regenerated ${imageNodes.length} image(s)!`
+      });
+      
+      figma.notify(`✅ Regenerated ${imageNodes.length} image(s)!`, { timeout: 3000 });
+      
+    } else {
+      // Geração de nova imagem
+      figma.ui.postMessage({
+        type: 'image-progress',
+        message: 'Generating new image...',
+        step: 1,
+        totalSteps: 2
+      });
+      
+      const imageBytes = await ImageGenerationService.generateImageAsBase64(msg.prompt, msg.apiKey, msg.size);
+      
+      figma.ui.postMessage({
+        type: 'image-progress',
+        message: 'Creating image in Figma...',
+        step: 2,
+        totalSteps: 2
+      });
+      
+      // Posição para nova imagem
+      const x = figma.viewport.center.x - 256;
+      const y = figma.viewport.center.y - 256;
+      
+      await ImageGenerationService.createImageInFigma(imageBytes, x, y, `AI Generated: ${msg.prompt.slice(0, 30)}...`);
+      
+      figma.ui.postMessage({
+        type: 'image-complete',
+        message: 'New image created successfully!'
+      });
+      
+      figma.notify('✅ New AI image created!', { timeout: 3000 });
+    }
+    
+  } catch (error) {
+    console.log('❌ Image generation error:', error);
+    figma.ui.postMessage({
+      type: 'error',
+      message: error instanceof Error ? error.message : 'Unknown error during image generation',
+      context: 'image'
+    });
+    figma.notify(`❌ Image generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
+  }
 }
 
 

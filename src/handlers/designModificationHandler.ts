@@ -484,7 +484,7 @@ export class DesignModificationHandler {
     }
   }
 
-  // Apply text modification
+  // Apply text modification with auto font size adjustment
   static async applyTextModification(element: SceneNode, modification: any) {
     console.log(`🔤 [DEBUG] Applying text modification:`, modification);
     
@@ -498,14 +498,11 @@ export class DesignModificationHandler {
     
     if (modification.action === 'replace' && modification.newValue) {
       try {
-        // Load current font
-        const fontName = textNode.fontName as FontName;
-        console.log(`🔤 [DEBUG] Loading font:`, fontName);
-        
-        if (fontName && fontName.family && fontName.style) {
-          await figma.loadFontAsync(fontName);
-        }
-        
+        // 1. Armazenar as propriedades originais da caixa de texto
+        const originalWidth = textNode.width;
+        const originalHeight = textNode.height;
+        const originalTextAutoResize = textNode.textAutoResize;
+
         // Extract text from newValue
         let newText = modification.newValue;
         if (typeof newText === 'object') {
@@ -515,14 +512,67 @@ export class DesignModificationHandler {
             newText = String(newText);
           }
         }
-        
+
+        console.log(`🔤 [DEBUG] Original dimensions: ${originalWidth}x${originalHeight}, autoResize: ${originalTextAutoResize}`);
         console.log(`🔤 [DEBUG] Changing text to: "${newText}"`);
+
+        // Validar que fontSize é um número antes de prosseguir
+        if (typeof textNode.fontSize !== 'number') {
+          console.log(`⚠️ Font size is mixed or not a number, skipping auto-fit.`);
+          // Aplica o texto sem ajuste
+          const fontName = textNode.fontName as FontName;
+          if (fontName && fontName.family && fontName.style) await figma.loadFontAsync(fontName);
+          textNode.characters = newText;
+          return;
+        }
+
+        let currentFontSize = textNode.fontSize;
+        const MIN_FONT_SIZE = 8; // Define um tamanho mínimo para a fonte para evitar que fique ilegível
+        console.log(`🔤 [DEBUG] Starting font size: ${currentFontSize}px, minimum: ${MIN_FONT_SIZE}px`);
+
+        // 2. Carregar a fonte e aplicar o novo texto
+        const fontName = textNode.fontName as FontName;
+        if (fontName && fontName.family && fontName.style) {
+          console.log(`🔤 [DEBUG] Loading font:`, fontName);
+          await figma.loadFontAsync(fontName);
+        }
+        
         textNode.characters = newText;
-        console.log(`✅ [DEBUG] Text successfully changed`);
+
+        // 3. Mudar temporariamente o modo de redimensionamento para medir o overflow
+        // Isso faz a caixa de texto crescer para acomodar todo o conteúdo.
+        textNode.textAutoResize = 'WIDTH_AND_HEIGHT';
+        console.log(`🔤 [DEBUG] Set textAutoResize to WIDTH_AND_HEIGHT for overflow detection`);
+
+        // 4. Loop para reduzir o tamanho da fonte se o texto transbordar
+        let iterations = 0;
+        const maxIterations = 50; // Evita loops infinitos
+        
+        while (
+          (textNode.width > originalWidth || textNode.height > originalHeight) &&
+          currentFontSize > MIN_FONT_SIZE &&
+          iterations < maxIterations
+        ) {
+          currentFontSize--;
+          iterations++;
+          console.log(`📏 [RESIZE] Text overflowed (${textNode.width.toFixed(1)}x${textNode.height.toFixed(1)} > ${originalWidth}x${originalHeight}). Reducing font size to ${currentFontSize}px (iteration ${iterations})`);
+          textNode.fontSize = currentFontSize;
+        }
+
+        if (iterations >= maxIterations) {
+          console.log(`⚠️ [RESIZE] Reached maximum iterations (${maxIterations}), stopping font size reduction`);
+        }
+
+        // 5. Restaurar as propriedades originais da caixa de texto
+        textNode.textAutoResize = originalTextAutoResize;
+        textNode.resize(originalWidth, originalHeight); // Garante que a caixa volte ao tamanho exato
+
+        console.log(`✅ [DEBUG] Text successfully changed and fitted. Final font size: ${currentFontSize}px after ${iterations} adjustments`);
+        console.log(`🔤 [DEBUG] Final dimensions: ${textNode.width}x${textNode.height}, autoResize restored to: ${textNode.textAutoResize}`);
         
         // Force selection update to make change visible
         figma.currentPage.selection = [textNode];
-        
+
       } catch (error) {
         console.log(`❌ [DEBUG] Error applying text modification:`, error);
         throw error;

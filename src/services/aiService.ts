@@ -202,8 +202,7 @@ Return your response as JSON with this structure:
       "type": "text|color|layout|style",
       "action": "replace|modify",
       "currentValue": "current value description",
-      "newValue": "new_text_preserving_original_\\n_structure_OR_#HEX_COLOR_for_colors",
-      "reasoning": "why this change"
+      "newValue": "new_text_preserving_original_\\n_structure_OR_#HEX_COLOR_for_colors"
     }
   ],
   "summary": "Overall description of changes"

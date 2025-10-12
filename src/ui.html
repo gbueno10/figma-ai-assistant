@@ -483,6 +483,37 @@
                 <div id="resultImage"></div>
             </div>
 
+            <!-- AI Image Editing Card -->
+            <div class="ai-card">
+                <div class="card-title">
+                    🖼️ AI Image Editing
+                </div>
+                <div class="card-description">
+                    Edit all images within a selected frame using AI. Select a frame and describe the transformation you want to apply to all images inside it.
+                </div>
+
+                <form id="editImagesForm">
+                    <div class="form-group">
+                        <label for="editPrompt">Image editing prompt:</label>
+                        <textarea id="editPrompt" placeholder="Transform into a charcoal drawing, make it black and white, add a vintage filter..." required></textarea>
+                    </div>
+
+                    <button type="submit" id="editImagesBtn">
+                        🚀 Edit Frame Images
+                    </button>
+                </form>
+
+                <div class="loading" id="loadingEditImages">
+                    ⏳ Processing images...
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBarEditImages"></div>
+                    </div>
+                    <div class="progress-text" id="progressTextEditImages"></div>
+                </div>
+
+                <div id="resultEditImages"></div>
+            </div>
+
             <!-- AI Design Modification Card -->
             <div class="ai-card">
                 <div class="card-title">
@@ -658,6 +689,47 @@
                         type: 'analyze-design-only'
                     }
                 }, '*');
+            });
+        }
+
+        // Initialize image editing functionality
+        function initImageEditing() {
+            const editImagesForm = document.getElementById('editImagesForm');
+            const editImagesBtn = document.getElementById('editImagesBtn');
+
+            editImagesForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const apiKey = document.getElementById('apiKey').value;
+                const prompt = document.getElementById('editPrompt').value;
+
+                if (!apiKey || !prompt) {
+                    showResult('Please fill in the API key and editing prompt.', 'error', 'resultEditImages');
+                    return;
+                }
+
+                // Save settings
+                saveSettings();
+
+                // Show loading
+                document.getElementById('loadingEditImages').style.display = 'block';
+                editImagesBtn.disabled = true;
+                document.getElementById('resultEditImages').innerHTML = '';
+                
+                // Reset progress
+                document.getElementById('progressBarEditImages').style.width = '0%';
+                document.getElementById('progressTextEditImages').textContent = 'Starting image editing...';
+
+                // Send message to main code
+                parent.postMessage({
+                    pluginMessage: {
+                        type: 'edit-frame-images',
+                        prompt: prompt,
+                        apiKey: apiKey
+                    }
+                }, '*');
+
+                actionsCount++;
             });
         }
 
@@ -854,6 +926,33 @@
                 document.getElementById('imageForm').style.display = 'none';
                 console.log('✅ Image generation completed');
             }
+            else if (msg.type === 'image-edit-progress') {
+                // Update progress for image editing
+                const progressBar = document.getElementById('progressBarEditImages');
+                const progressText = document.getElementById('progressTextEditImages');
+                
+                if (msg.step && msg.totalSteps) {
+                    const percentage = (msg.step / msg.totalSteps) * 100;
+                    progressBar.style.width = `${percentage}%`;
+                }
+                
+                progressText.textContent = msg.message;
+                console.log(`🖼️ Image editing progress: ${msg.message}`);
+            }
+            else if (msg.type === 'image-edit-complete') {
+                // Hide loading
+                document.getElementById('loadingEditImages').style.display = 'none';
+                document.getElementById('editImagesBtn').disabled = false;
+                
+                const resultDiv = document.getElementById('resultEditImages');
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        ✅ ${msg.message || 'Images edited successfully!'}
+                    </div>
+                `;
+                
+                console.log('✅ Image editing completed');
+            }
             else if (msg.type === 'modification-complete') {
                 // Hide loading
                 document.getElementById('loadingModify').style.display = 'none';
@@ -868,15 +967,19 @@
                 console.log('✅ Modifications completed');
             }
             else if (msg.type === 'error') {
-                // Hide loading for both modify and image
+                // Hide loading for all contexts
                 document.getElementById('loadingModify').style.display = 'none';
                 document.getElementById('modifyBtn').disabled = false;
                 document.getElementById('loadingImage').style.display = 'none';
                 document.getElementById('generateBtn').disabled = false;
+                document.getElementById('loadingEditImages').style.display = 'none';
+                document.getElementById('editImagesBtn').disabled = false;
                 
                 // Show error in appropriate container
                 if (msg.context === 'image') {
                     showResult(`❌ ${msg.message}`, 'error', 'resultImage');
+                } else if (msg.context === 'image-edit') {
+                    showResult(`❌ ${msg.message}`, 'error', 'resultEditImages');
                 } else {
                     showResult(`❌ ${msg.message}`, 'error', 'resultModify');
                 }
@@ -895,6 +998,7 @@
             console.log('🎯 Initializing Figma AI Assistant...');
             
             initImageGeneration();
+            initImageEditing();
             initAnalyze();
             initModify();
             initClose();

@@ -155,6 +155,10 @@ figma.ui.onmessage = async (msg) => {
     } else if (msg.type === 'regenerate-images') {
       console.log('🔄 Starting image regeneration...');
       await handleImageGeneration(msg, true);
+      
+    } else if (msg.type === 'edit-frame-images') {
+      console.log('🖼️ Starting frame image editing...');
+      await handleFrameImageEditing(msg);
     }
   } catch (error: any) {
     figma.notify(`❌ Erro: ${error.message}`, { timeout: 5000 });
@@ -197,14 +201,14 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
         return;
       }
       
+      // Passo 1: Disparar todas as requisições para a API em paralelo (isto está correto!)
       figma.ui.postMessage({
         type: 'image-progress',
-        message: `Starting parallel regeneration of ${imageNodes.length} image(s)...`,
+        message: `Gerando ${imageNodes.length} imagem(ns) em paralelo...`,
         step: 1,
-        totalSteps: 3
+        totalSteps: 2 + imageNodes.length // Total de passos agora é dinâmico
       });
-      
-      // PROCESSAMENTO EM PARALELO - Geração de todas as imagens simultaneamente
+
       const regenerationPromises = imageNodes.map(async (node, index) => {
         try {
           console.log(`🔄 [PARALLEL] Starting regeneration ${index + 1}/${imageNodes.length}: ${node.name}`);
@@ -212,14 +216,12 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
           // Extrai a imagem atual
           const imageFill = (node as any).fills.find((fill: any) => fill.type === 'IMAGE');
           if (!imageFill) {
-            console.log(`⚠️ [PARALLEL] No image fill found for ${node.name}`);
-            return { success: false, node, error: 'No image fill found' };
+            throw new Error('No image fill found');
           }
           
           const image = figma.getImageByHash(imageFill.imageHash);
           if (!image) {
-            console.log(`⚠️ [PARALLEL] Image hash not found for ${node.name}`);
-            return { success: false, node, error: 'Image hash not found' };
+            throw new Error('Image hash not found');
           }
           
           const imageBytes = await image.getBytesAsync();
@@ -236,56 +238,55 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
             console.log(`✅ [PARALLEL] Auto-regenerated ${node.name}`);
           }
           
-          return { success: true, node, newImageBytes, error: null };
+          return newImageBytes;
           
         } catch (error) {
           console.log(`❌ [PARALLEL] Error generating image for ${node.name}:`, error);
-          return { success: false, node, error: error instanceof Error ? error.message : 'Unknown error' };
+          throw error;
         }
       });
       
-      figma.ui.postMessage({
-        type: 'image-progress',
-        message: `Generating ${imageNodes.length} images in parallel...`,
-        step: 2,
-        totalSteps: 3
-      });
-      
-      // Aguarda todas as gerações terminarem
-      const results = await Promise.all(regenerationPromises);
-      
-      figma.ui.postMessage({
-        type: 'image-progress',
-        message: `Applying generated images to Figma...`,
-        step: 3,
-        totalSteps: 3
-      });
-      
-      // Aplica as imagens geradas sequencialmente (interação com Figma deve ser sequencial)
+      const results = await Promise.allSettled(regenerationPromises);
+
+      // Passo 2: Aplicar as imagens de volta no Figma de forma SEQUENCIAL
       let successCount = 0;
       let errorCount = 0;
-      
-      for (const result of results) {
-        if (result.success && result.newImageBytes) {
-          try {
-            await ImageGenerationService.replaceImageInFigma(result.node, result.newImageBytes);
-            successCount++;
-            console.log(`✅ [APPLY] Successfully applied image to ${result.node.name}`);
-          } catch (error) {
-            console.log(`❌ [APPLY] Error applying image to ${result.node.name}:`, error);
-            figma.notify(`⚠️ Failed to apply ${result.node.name}: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 3000 });
-            errorCount++;
+
+      for (let i = 0; i < results.length; i++) {
+          const result = results[i];
+          const node = imageNodes[i];
+
+          // Feedback de progresso mais detalhado para o usuário
+          figma.ui.postMessage({
+              type: 'image-progress',
+              message: `Aplicando imagem ${i + 1} de ${imageNodes.length}...`,
+              step: 2 + i,
+              totalSteps: 2 + imageNodes.length
+          });
+
+          if (result.status === 'fulfilled') {
+              try {
+                  await ImageGenerationService.replaceImageInFigma(node, result.value);
+                  successCount++;
+                  console.log(`✅ [APPLY] Imagem aplicada com sucesso a ${node.name}`);
+              } catch (applyError) {
+                  errorCount++;
+                  console.log(`❌ [APPLY] Erro ao aplicar imagem a ${node.name}:`, applyError);
+              }
+          } else {
+              errorCount++;
+              console.log(`❌ [GENERATE] Erro ao gerar imagem para ${node.name}:`, result.reason);
+              figma.notify(`Falha ao gerar imagem para ${node.name}`, { error: true });
           }
-        } else {
-          console.log(`❌ [RESULT] Failed result for ${result.node.name}: ${result.error}`);
-          figma.notify(`⚠️ Failed to regenerate ${result.node.name}: ${result.error}`, { timeout: 3000 });
-          errorCount++;
-        }
+
+          // **A MUDANÇA MAIS IMPORTANTE!**
+          // Pausa de 50ms para permitir que a UI do Figma "respire"
+          await new Promise(resolve => setTimeout(resolve, 50));
       }
       
       const message = errorCount > 0 
-        ? `Regenerated ${successCount}/${imageNodes.length} image(s) (${errorCount} failed)`
-        : `Successfully regenerated all ${successCount} image(s)!`;
+        ? `Regeneradas ${successCount}/${imageNodes.length} imagens (${errorCount} falhas)`
+        : `Todas as ${successCount} imagens foram regeneradas com sucesso!`;
       
       figma.ui.postMessage({
         type: 'image-complete',
@@ -293,10 +294,10 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       });
       
       figma.notify(`✅ ${message}`, { timeout: 3000 });
-      console.log(`🎉 [PARALLEL] Regeneration complete: ${successCount} success, ${errorCount} errors`);
+      console.log(`🎉 [PARALLEL] Regeneração completa: ${successCount} sucessos, ${errorCount} erros`);
       
     } else {
-      // Geração de nova imagem
+      // Geração de nova imagem (a lógica existente para uma imagem está boa)
       figma.ui.postMessage({
         type: 'image-progress',
         message: 'Generating new image...',
@@ -313,7 +314,6 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
         totalSteps: 2
       });
       
-      // Posição para nova imagem
       const x = figma.viewport.center.x - 256;
       const y = figma.viewport.center.y - 256;
       
@@ -335,6 +335,168 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       context: 'image'
     });
     figma.notify(`❌ Image generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
+  }
+}
+
+// Handler para edição em lote de imagens dentro de um frame
+async function handleFrameImageEditing(msg: any) {
+  try {
+    const { ImageGenerationService } = await import('./services/imageGenerationService');
+    
+    // Verifica se há um frame selecionado
+    const selection = figma.currentPage.selection;
+    if (selection.length !== 1) {
+      figma.ui.postMessage({
+        type: 'error',
+        message: 'Please select exactly one frame for image editing',
+        context: 'image-edit'
+      });
+      return;
+    }
+    
+    const selectedNode = selection[0];
+    if (selectedNode.type !== 'FRAME') {
+      figma.ui.postMessage({
+        type: 'error',
+        message: 'Please select a Frame (not a group or other element)',
+        context: 'image-edit'
+      });
+      return;
+    }
+    
+    // Função recursiva para encontrar todos os nós com imagens
+    function findImageNodes(node: SceneNode): SceneNode[] {
+      const imageNodes: SceneNode[] = [];
+      
+      // Verifica se o nó atual tem uma imagem
+      if ('fills' in node && node.fills && Array.isArray(node.fills)) {
+        const hasImage = node.fills.some(fill => fill.type === 'IMAGE');
+        if (hasImage) {
+          imageNodes.push(node);
+        }
+      }
+      
+      // Busca recursivamente nos filhos
+      if ('children' in node) {
+        for (const child of node.children) {
+          imageNodes.push(...findImageNodes(child));
+        }
+      }
+      
+      return imageNodes;
+    }
+    
+    const imageNodes = findImageNodes(selectedNode);
+    
+    if (imageNodes.length === 0) {
+      figma.ui.postMessage({
+        type: 'error',
+        message: 'No images found within the selected frame',
+        context: 'image-edit'
+      });
+      return;
+    }
+    
+    console.log(`🖼️ Found ${imageNodes.length} image(s) in frame: ${selectedNode.name}`);
+    
+    figma.ui.postMessage({
+      type: 'image-edit-progress',
+      message: `Found ${imageNodes.length} image(s) in frame. Starting editing...`,
+      step: 1,
+      totalSteps: 3
+    });
+    
+    // PROCESSAMENTO EM PARALELO - Edição de todas as imagens simultaneamente
+    const editingPromises = imageNodes.map(async (node, index) => {
+      try {
+        console.log(`🖼️ [PARALLEL] Starting editing ${index + 1}/${imageNodes.length}: ${node.name}`);
+        
+        // Extrai a imagem atual
+        const imageFill = (node as any).fills.find((fill: any) => fill.type === 'IMAGE');
+        if (!imageFill) {
+          console.log(`⚠️ [PARALLEL] No image fill found for ${node.name}`);
+          return { success: false, node, error: 'No image fill found' };
+        }
+        
+        const image = figma.getImageByHash(imageFill.imageHash);
+        if (!image) {
+          console.log(`⚠️ [PARALLEL] Image hash not found for ${node.name}`);
+          return { success: false, node, error: 'Image hash not found' };
+        }
+        
+        const imageBytes = await image.getBytesAsync();
+        
+        // Edita a imagem usando o prompt fornecido
+        const editedImageBytes = await ImageGenerationService.editImage(imageBytes, msg.prompt, msg.apiKey);
+        console.log(`✅ [PARALLEL] Successfully edited ${node.name}`);
+        
+        return { success: true, node, editedImageBytes, error: null };
+        
+      } catch (error) {
+        console.log(`❌ [PARALLEL] Error editing image for ${node.name}:`, error);
+        return { success: false, node, error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+    
+    figma.ui.postMessage({
+      type: 'image-edit-progress',
+      message: `Editing ${imageNodes.length} images in parallel...`,
+      step: 2,
+      totalSteps: 3
+    });
+    
+    // Aguarda todas as edições terminarem
+    const results = await Promise.all(editingPromises);
+    
+    figma.ui.postMessage({
+      type: 'image-edit-progress',
+      message: `Applying edited images to Figma...`,
+      step: 3,
+      totalSteps: 3
+    });
+    
+    // Aplica as imagens editadas sequencialmente (interação com Figma deve ser sequencial)
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const result of results) {
+      if (result.success && result.editedImageBytes) {
+        try {
+          await ImageGenerationService.replaceImageInFigma(result.node, result.editedImageBytes);
+          successCount++;
+          console.log(`✅ [APPLY] Successfully applied edited image to ${result.node.name}`);
+        } catch (error) {
+          console.log(`❌ [APPLY] Error applying edited image to ${result.node.name}:`, error);
+          figma.notify(`⚠️ Failed to apply ${result.node.name}: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 3000 });
+          errorCount++;
+        }
+      } else {
+        console.log(`❌ [RESULT] Failed result for ${result.node.name}: ${result.error}`);
+        figma.notify(`⚠️ Failed to edit ${result.node.name}: ${result.error}`, { timeout: 3000 });
+        errorCount++;
+      }
+    }
+    
+    const message = errorCount > 0 
+      ? `Edited ${successCount}/${imageNodes.length} image(s) (${errorCount} failed)`
+      : `Successfully edited all ${successCount} image(s)!`;
+    
+    figma.ui.postMessage({
+      type: 'image-edit-complete',
+      message: message
+    });
+    
+    figma.notify(`✅ ${message}`, { timeout: 3000 });
+    console.log(`🎉 [PARALLEL] Image editing complete: ${successCount} success, ${errorCount} errors`);
+    
+  } catch (error) {
+    console.log('❌ Frame image editing error:', error);
+    figma.ui.postMessage({
+      type: 'error',
+      message: error instanceof Error ? error.message : 'Unknown error during frame image editing',
+      context: 'image-edit'
+    });
+    figma.notify(`❌ Frame image editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
   }
 }
 

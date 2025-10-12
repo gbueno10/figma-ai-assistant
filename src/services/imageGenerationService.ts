@@ -502,6 +502,106 @@ Return a single, well-crafted prompt (not JSON) that captures the essence of the
     }
   }
 
+  // Edita uma imagem existente usando a API de edição da OpenAI
+  static async editImage(imageBytes: Uint8Array, prompt: string, apiKey: string): Promise<Uint8Array> {
+    const apiStartTime = Date.now();
+    console.log(`🖼️ [EDIT-${apiStartTime}] Starting image editing with prompt: "${prompt}"`);
+    
+    // Converte imagem para base64
+    const base64Image = this.uint8ArrayToBase64(imageBytes);
+    
+    // Constrói o corpo da requisição no formato JSON
+    const requestBody = {
+      image: base64Image,
+      prompt: prompt,
+      n: 1,
+      size: "1024x1024",
+      response_format: "b64_json"
+    };
+
+    console.log(`📤 [EDIT-${Date.now() - apiStartTime}ms] Sending image editing request to OpenAI...`);
+
+    try {
+      const response = await fetch('https://api.openai.com/v1/images/edits', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      console.log(`📥 [EDIT-${Date.now() - apiStartTime}ms] Response status:`, response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log(`❌ [EDIT-${Date.now() - apiStartTime}ms] Error response:`, errorText);
+        
+        let userFriendlyError = `OpenAI API error (${response.status})`;
+        if (response.status === 401) {
+          userFriendlyError = 'Chave API inválida. Verifique suas credenciais.';
+        } else if (response.status === 429) {
+          userFriendlyError = 'Limite de taxa excedido. Tente novamente em alguns minutos.';
+        } else if (response.status >= 500) {
+          userFriendlyError = 'Erro do servidor OpenAI. Tente novamente mais tarde.';
+        } else if (response.status === 400) {
+          userFriendlyError = 'Requisição inválida. Verifique os parâmetros da imagem.';
+        }
+        
+        throw new Error(`${userFriendlyError}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ [EDIT-${Date.now() - apiStartTime}ms] Image editing completed successfully`);
+
+      if (!data.data || !data.data[0] || !data.data[0].b64_json) {
+        throw new Error('Resposta inválida da API - dados da imagem não encontrados');
+      }
+
+      // Converte base64 de volta para Uint8Array usando a implementação local
+      const base64ToBytes = (base64: string): Uint8Array => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+        let result = '';
+        
+        // Remove padding e caracteres inválidos
+        const cleanBase64 = base64.replace(/[^A-Za-z0-9+/]/g, '');
+        
+        for (let i = 0; i < cleanBase64.length; i += 4) {
+          const encoded1 = chars.indexOf(cleanBase64[i]);
+          const encoded2 = chars.indexOf(cleanBase64[i + 1]);
+          const encoded3 = chars.indexOf(cleanBase64[i + 2]);
+          const encoded4 = chars.indexOf(cleanBase64[i + 3]);
+          
+          const bitmap = (encoded1 << 18) | (encoded2 << 12) | (encoded3 << 6) | encoded4;
+          
+          result += String.fromCharCode((bitmap >> 16) & 255);
+          if (encoded3 !== 64) result += String.fromCharCode((bitmap >> 8) & 255);
+          if (encoded4 !== 64) result += String.fromCharCode(bitmap & 255);
+        }
+        
+        const bytes = new Uint8Array(result.length);
+        for (let i = 0; i < result.length; i++) {
+          bytes[i] = result.charCodeAt(i);
+        }
+        
+        return bytes;
+      };
+      
+      const editedImageBytes = base64ToBytes(data.data[0].b64_json);
+      
+      console.log(`🎯 [EDIT-${Date.now() - apiStartTime}ms] Image editing completed. Total time: ${Date.now() - apiStartTime}ms`);
+      
+      return editedImageBytes;
+
+    } catch (error) {
+      console.log(`❌ [EDIT-${Date.now() - apiStartTime}ms] Image editing error:`, error);
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Erro de rede. Verifique sua conexão com a internet.');
+      }
+      throw error;
+    }
+  }
+
   // Substitui uma imagem existente por uma nova
   static async replaceImageInFigma(targetNode: SceneNode, imageBytes: Uint8Array): Promise<void> {
     console.log(`🔄 [FIGMA-REPLACE] Replacing image in node: ${targetNode.name} (${targetNode.id})`);

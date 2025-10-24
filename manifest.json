@@ -7,6 +7,11 @@
   "editorType": ["figma"],
   "documentAccess": "dynamic-page",
   "networkAccess": {
-    "allowedDomains": ["https://api.openai.com"]
+    "allowedDomains": ["none"],
+    "devAllowedDomains": [
+      "http://localhost:3000",
+      "https://localhost:3000"
+    ],
+    "reasoning": "The plugin communicates with a local backend during development for AI processing."
   }
 }

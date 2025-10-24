@@ -7,7 +7,7 @@ import { AIService } from '../services/aiService';
 export class DesignModificationHandler {
   
   // Handler principal para modificação de design
-  static async handleDesignModification(prompt: string, types: string[], apiKey: string) {
+  static async handleDesignModification(prompt: string, types: string[], apiKey?: string) {
     const startTime = Date.now();
     console.log(`🎨 [${new Date().toISOString()}] Starting design modification process...`);
     console.log(`🎯 Modification types selected:`, types);
@@ -251,26 +251,44 @@ export class DesignModificationHandler {
 
   // Update AI modifications to use new IDs from duplicated elements
   static updateModificationIds(modifications: any, idMapping: Map<string, string>): any {
-    console.log(`🔄 Updating ${modifications.modifications.length} modifications with new IDs...`);
-    
+    const modificationsArray = Array.isArray(modifications)
+      ? modifications
+      : Array.isArray(modifications?.modifications)
+        ? modifications.modifications
+        : null;
+
+    if (!modificationsArray) {
+      console.log('⚠️ No modifications array found. Skipping ID remap.');
+      return modifications;
+    }
+
+    console.log(`🔄 Updating ${modificationsArray.length} modifications with new IDs...`);
+
+    const updatedArray = modificationsArray.map((mod: any) => {
+      const newId = idMapping.get(mod.elementId);
+      if (newId) {
+        console.log(`🔄 Updated modification ID: ${mod.elementId} -> ${newId} (${mod.type})`);
+        return {
+          ...mod,
+          elementId: newId
+        };
+      }
+
+      console.log(`⚠️ No ID mapping found for element: ${mod.elementId}`);
+      return mod;
+    });
+
+    if (Array.isArray(modifications)) {
+      console.log(`✅ Updated ${updatedArray.length} modifications (array response)`);
+      return updatedArray;
+    }
+
     const updatedModifications = {
       ...modifications,
-      modifications: modifications.modifications.map((mod: any) => {
-        const newId = idMapping.get(mod.elementId);
-        if (newId) {
-          console.log(`🔄 Updated modification ID: ${mod.elementId} -> ${newId} (${mod.type})`);
-          return {
-            ...mod,
-            elementId: newId
-          };
-        } else {
-          console.log(`⚠️ No ID mapping found for element: ${mod.elementId}`);
-          return mod;
-        }
-      })
+      modifications: updatedArray
     };
-    
-    console.log(`✅ Updated ${updatedModifications.modifications.length} modifications`);
+
+    console.log(`✅ Updated ${updatedArray.length} modifications`);
     return updatedModifications;
   }
 
@@ -366,12 +384,23 @@ export class DesignModificationHandler {
 
   // Apply design modifications
   static async applyDesignModifications(nodes: readonly SceneNode[], aiModifications: any) {
-    console.log(`🔧 Applying ${aiModifications.modifications.length} modifications...`);
+    const modificationsArray = Array.isArray(aiModifications)
+      ? aiModifications
+      : Array.isArray(aiModifications?.modifications)
+        ? aiModifications.modifications
+        : [];
+
+    if (modificationsArray.length === 0) {
+      console.log('⚠️ No modifications provided by AI. Skipping applyDesignModifications.');
+      return;
+    }
+
+    console.log(`🔧 Applying ${modificationsArray.length} modifications...`);
     console.log(`🔍 [DEBUG] All selected nodes:`, nodes.map(n => ({ id: n.id, name: n.name, type: n.type })));
     
     // Load fonts for text modifications
     const fontsToLoad = new Set<FontName>();
-    for (const mod of aiModifications.modifications) {
+    for (const mod of modificationsArray) {
       console.log(`🔍 [DEBUG] Processing modification:`, mod);
       
       if (mod.type === 'text') {
@@ -403,9 +432,9 @@ export class DesignModificationHandler {
     let skippedCount = 0;
     let errorCount = 0;
     
-    for (const mod of aiModifications.modifications) {
+    for (const mod of modificationsArray) {
       try {
-        console.log(`🔄 [DEBUG] Applying modification ${successCount + skippedCount + errorCount + 1}/${aiModifications.modifications.length}:`, {
+        console.log(`🔄 [DEBUG] Applying modification ${successCount + skippedCount + errorCount + 1}/${modificationsArray.length}:`, {
           elementId: mod.elementId,
           type: mod.type,
           action: mod.action

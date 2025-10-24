@@ -57,7 +57,7 @@ export class AIDesignAssistant {
   }
   
   // Envia dados para a IA
-  async sendToAI(screenshot: string, structure: any, apiKey: string): Promise<any> {
+  async sendToAI(screenshot: string, structure: any, apiKey?: string): Promise<any> {
     return await AIService.sendToAI(screenshot, structure, apiKey);
   }
   

@@ -1,8 +1,12 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset="utf-8">
-    <style>
+  <head>
+      <meta charset="utf-8">
+      <script>
+          // Ensure CommonJS-style bundles don't crash when running in the browser-only UI sandbox
+          window.module = window.module || { exports: {} };
+      </script>
+      <style>
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             padding: 0;
@@ -415,12 +419,19 @@
         <div class="main-content">
             <!-- Settings Section -->
             <div class="settings-section">
-                <div class="settings-title">⚙️ API Key</div>
+                <div class="settings-title">⚙️ Settings</div>
                 <div class="form-group">
                     <label for="apiKey">OpenAI API Key:</label>
-                    <input type="password" id="apiKey" placeholder="sk-..." required>
+                    <input type="password" id="apiKey" placeholder="sk-...">
                     <div class="api-key-info">
                         🔒 Stored locally and securely
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="backendUrl">Backend URL:</label>
+                    <input type="text" id="backendUrl" placeholder="http://localhost:3000/api">
+                    <div class="api-key-info">
+                        🌐 Defaults to the local Docker container
                     </div>
                 </div>
             </div>
@@ -577,16 +588,18 @@
 
         // Settings management
         function saveSettings() {
-            const apiKey = document.getElementById('apiKey').value;
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const backendUrl = document.getElementById('backendUrl').value.trim();
             
             parent.postMessage({
                 pluginMessage: {
                     type: 'save-settings',
-                    apiKey: apiKey
+                    apiKey: apiKey,
+                    backendUrl: backendUrl
                 }
             }, '*');
             
-            console.log('📤 Saving settings...');
+            console.log(`📤 Saving settings... Backend: ${backendUrl || 'default'}`);
         }
 
         function loadSettings() {
@@ -619,10 +632,9 @@
             regenerateBtn.addEventListener('click', () => {
                 console.log('🔄 Starting image regeneration...');
                 
-                const apiKey = document.getElementById('apiKey').value;
+                const apiKey = document.getElementById('apiKey').value.trim();
                 if (!apiKey) {
-                    showResult('Please enter your OpenAI API key first.', 'error', 'resultImage');
-                    return;
+                    console.log('⚠️ No API key provided. Backend credentials will be used if configured.');
                 }
 
                 // Check if images are selected
@@ -641,13 +653,13 @@
             imageForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 
-                const apiKey = document.getElementById('apiKey').value;
+                const apiKey = document.getElementById('apiKey').value.trim();
                 const prompt = document.getElementById('imagePrompt').value;
                 const size = document.getElementById('imageSize').value;
                 const mode = generateBtn.dataset.mode || 'new';
 
-                if (!apiKey || !prompt) {
-                    showResult('Please fill in the API key and image description.', 'error', 'resultImage');
+                if (!prompt) {
+                    showResult('Please provide an image description.', 'error', 'resultImage');
                     return;
                 }
 
@@ -700,12 +712,16 @@
             editImagesForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 
-                const apiKey = document.getElementById('apiKey').value;
+                const apiKey = document.getElementById('apiKey').value.trim();
                 const prompt = document.getElementById('editPrompt').value;
 
-                if (!apiKey || !prompt) {
-                    showResult('Please fill in the API key and editing prompt.', 'error', 'resultEditImages');
+                if (!prompt) {
+                    showResult('Please provide an editing prompt.', 'error', 'resultEditImages');
                     return;
+                }
+
+                if (!apiKey) {
+                    console.log('⚠️ No API key provided for image editing; relying on backend configuration.');
                 }
 
                 // Save settings
@@ -772,14 +788,18 @@
             modifyForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 
-                const apiKey = document.getElementById('apiKey').value;
+                const apiKey = document.getElementById('apiKey').value.trim();
                 const prompt = document.getElementById('modifyPrompt').value;
                 const types = Array.from(document.querySelectorAll('input[name="modifyTypes"]:checked'))
                     .map(checkbox => checkbox.value);
 
-                if (!apiKey || !prompt || types.length === 0) {
-                    showResult('Please fill in the API key, modification description, and select at least one type.', 'error', 'resultModify');
+                if (!prompt || types.length === 0) {
+                    showResult('Please provide the modification description and select at least one type.', 'error', 'resultModify');
                     return;
+                }
+
+                if (!apiKey) {
+                    console.log('⚠️ No API key provided for design modifications; relying on backend configuration.');
                 }
 
                 // Save settings
@@ -815,12 +835,11 @@
             
             if (msg.type === 'settings-loaded') {
                 // Fill fields with loaded settings
-                if (msg.apiKey) {
-                    document.getElementById('apiKey').value = msg.apiKey;
-                    console.log('✅ API key loaded');
-                } else {
-                    console.log('⚠️ No API key saved');
-                }
+                document.getElementById('apiKey').value = msg.apiKey || '';
+                document.getElementById('backendUrl').value = msg.backendUrl || 'http://localhost:3000/api';
+                
+                console.log(msg.apiKey ? '✅ API key loaded' : 'ℹ️ API key not set (using backend configuration)');
+                console.log(`✅ Backend URL loaded: ${document.getElementById('backendUrl').value}`);
             }
             else if (msg.type === 'design-analysis-complete') {
                 // Show the JSON analysis for debugging

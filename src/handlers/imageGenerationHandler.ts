@@ -13,12 +13,16 @@ export class ImageGenerationHandler {
     
     try {
       // Validar dados recebidos
-      if (!msg.prompt || !msg.apiKey) {
+      if (!msg.prompt) {
         figma.ui.postMessage({
           type: 'error',
-          message: 'Prompt e chave API são obrigatórios.'
+          message: 'Prompt é obrigatório.'
         });
         return;
+      }
+      
+      if (!msg.apiKey) {
+        console.log('⚠️ Nenhuma chave da API fornecida. Usando credenciais configuradas no backend.');
       }
 
       console.log(`📝 Prompt: "${msg.prompt}"`);
@@ -167,12 +171,16 @@ export class ImageGenerationHandler {
       }
 
       // Validar dados recebidos
-      if (!msg.prompt || !msg.apiKey) {
+      if (!msg.prompt) {
         figma.ui.postMessage({
           type: 'error',
-          message: 'Prompt e chave API são obrigatórios.'
+          message: 'Prompt é obrigatório.'
         });
         return;
+      }
+      
+      if (!msg.apiKey) {
+        console.log('⚠️ Nenhuma chave da API fornecida para substituição de imagem; usando backend.');
       }
 
       console.log(`🎯 Target: ${targetNode.name} (${targetNode.type})`);

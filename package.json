@@ -10,7 +10,10 @@
     "build:quick": "webpack --config webpack.dev.js --optimization-minimize=false",
     "dev": "webpack --config webpack.dev.js --watch",
     "dev:simple": "webpack --config webpack.simple.js --watch",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:build": "npm --prefix backend run build",
+    "backend:start": "npm --prefix backend run start"
   },
   "keywords": [
     "figma",

@@ -1,14 +1,37 @@
+
 /// <reference types="@figma/plugin-typings" />
 
 // Importações dos módulos
 import { AIDesignAssistant } from './aiDesignAssistant';
 import { DesignModificationHandler } from './handlers/designModificationHandler';
+import { DEFAULT_BACKEND_BASE_URL } from './config';
+import { setBackendBaseUrl } from './services/backendClient';
 
 // Plugin principal do AI Design Assistant
 figma.showUI(__html__, { width: 400, height: 500 });
   
 
 
+
+const API_KEY_STORAGE_KEY = 'figma-ai-assistant-api-key';
+const BACKEND_URL_STORAGE_KEY = 'figma-ai-assistant-backend-url';
+
+// Inicializa a URL do backend a partir do storage (ou usa o padrão)
+(async () => {
+  try {
+    const storedUrl = await figma.clientStorage.getAsync(BACKEND_URL_STORAGE_KEY);
+    if (storedUrl && typeof storedUrl === 'string') {
+      const normalized = setBackendBaseUrl(storedUrl);
+      console.log(`🔧 Backend URL carregada do storage: ${normalized}`);
+    } else {
+      setBackendBaseUrl(DEFAULT_BACKEND_BASE_URL);
+      console.log(`ℹ️ Usando backend URL padrão: ${DEFAULT_BACKEND_BASE_URL}`);
+    }
+  } catch (error) {
+    console.log('⚠️ Falha ao carregar backend URL do storage:', error);
+    setBackendBaseUrl(DEFAULT_BACKEND_BASE_URL);
+  }
+})();
 
 // Instância global do assistente
 const aiAssistant = new AIDesignAssistant();
@@ -111,11 +134,15 @@ figma.ui.onmessage = async (msg) => {
       
     } else if (msg.type === 'load-settings') {
       try {
-        const apiKey = await figma.clientStorage.getAsync('figma-ai-assistant-api-key') || '';
-        
+        const apiKey = (await figma.clientStorage.getAsync(API_KEY_STORAGE_KEY)) || '';
+        const storedBackendUrl =
+          (await figma.clientStorage.getAsync(BACKEND_URL_STORAGE_KEY)) || DEFAULT_BACKEND_BASE_URL;
+        const normalizedUrl = setBackendBaseUrl(storedBackendUrl);
+
         figma.ui.postMessage({
           type: 'settings-loaded',
-          apiKey
+          apiKey,
+          backendUrl: normalizedUrl
         });
         
         console.log('✅ Settings loaded from storage');
@@ -125,7 +152,12 @@ figma.ui.onmessage = async (msg) => {
     
     } else if (msg.type === 'save-settings') {
       try {
-        await figma.clientStorage.setAsync('figma-ai-assistant-api-key', msg.apiKey);
+        await figma.clientStorage.setAsync(API_KEY_STORAGE_KEY, msg.apiKey || '');
+        
+        const normalizedUrl = setBackendBaseUrl(msg.backendUrl);
+        await figma.clientStorage.setAsync(BACKEND_URL_STORAGE_KEY, normalizedUrl);
+        console.log(`✅ Backend URL saved: ${normalizedUrl}`);
+
         console.log('✅ Settings saved to storage');
       } catch (error) {
         console.log('❌ Error saving settings:', error);
@@ -499,5 +531,3 @@ async function handleFrameImageEditing(msg: any) {
     figma.notify(`❌ Frame image editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
   }
 }
-
-

@@ -2,42 +2,27 @@
 /// <reference types="@figma/plugin-typings" />
 
 // Importações dos módulos
+import { showUI } from '@create-figma-plugin/utilities';
 import { AIDesignAssistant } from './aiDesignAssistant';
 import { DesignModificationHandler } from './handlers/designModificationHandler';
 import { DEFAULT_BACKEND_BASE_URL } from './config';
 import { setBackendBaseUrl } from './services/backendClient';
 
-// Plugin principal do AI Design Assistant
-figma.showUI(__html__, { width: 400, height: 500 });
-  
-
-
-
 const API_KEY_STORAGE_KEY = 'figma-ai-assistant-api-key';
 const BACKEND_URL_STORAGE_KEY = 'figma-ai-assistant-backend-url';
 
-// Inicializa a URL do backend a partir do storage (ou usa o padrão)
-(async () => {
-  try {
-    const storedUrl = await figma.clientStorage.getAsync(BACKEND_URL_STORAGE_KEY);
-    if (storedUrl && typeof storedUrl === 'string') {
-      const normalized = setBackendBaseUrl(storedUrl);
-      console.log(`🔧 Backend URL carregada do storage: ${normalized}`);
-    } else {
-      setBackendBaseUrl(DEFAULT_BACKEND_BASE_URL);
-      console.log(`ℹ️ Usando backend URL padrão: ${DEFAULT_BACKEND_BASE_URL}`);
-    }
-  } catch (error) {
-    console.log('⚠️ Falha ao carregar backend URL do storage:', error);
-    setBackendBaseUrl(DEFAULT_BACKEND_BASE_URL);
-  }
-})();
+let aiAssistant: AIDesignAssistant;
 
-// Instância global do assistente
-const aiAssistant = new AIDesignAssistant();
+export default function runPlugin() {
+  showUI({ width: 400, height: 500 });
+  void initializeBackendUrl();
+  aiAssistant = new AIDesignAssistant();
+  initializeUiMessageHandler();
+  bootstrapSelectionState();
+}
 
-// Escuta mensagens da UI
-figma.ui.onmessage = async (msg) => {
+function initializeUiMessageHandler() {
+  figma.ui.onmessage = async (msg) => {
   console.log('Mensagem recebida da UI:', msg);
   
   try {
@@ -198,15 +183,34 @@ figma.ui.onmessage = async (msg) => {
   }
 };
 
-// Inicialização automática
-const selection = figma.currentPage.selection;
-if (selection.length > 0 && selection[0].type === "FRAME") {
-  const frame = selection[0];
-  figma.ui.postMessage({
-    type: 'frame-selected',
-    frameName: frame.name,
-    elementCount: aiAssistant.countElements(frame)
-  });
+}
+
+function bootstrapSelectionState() {
+  const selection = figma.currentPage.selection;
+  if (selection.length > 0 && selection[0].type === 'FRAME') {
+    const frame = selection[0];
+    figma.ui.postMessage({
+      type: 'frame-selected',
+      frameName: frame.name,
+      elementCount: aiAssistant.countElements(frame)
+    });
+  }
+}
+
+async function initializeBackendUrl() {
+  try {
+    const storedUrl = await figma.clientStorage.getAsync(BACKEND_URL_STORAGE_KEY);
+    if (storedUrl && typeof storedUrl === 'string') {
+      const normalized = setBackendBaseUrl(storedUrl);
+      console.log(`🔧 Backend URL carregada do storage: ${normalized}`);
+    } else {
+      setBackendBaseUrl(DEFAULT_BACKEND_BASE_URL);
+      console.log(`ℹ️ Usando backend URL padrão: ${DEFAULT_BACKEND_BASE_URL}`);
+    }
+  } catch (error) {
+    console.log('⚠️ Falha ao carregar backend URL do storage:', error);
+    setBackendBaseUrl(DEFAULT_BACKEND_BASE_URL);
+  }
 }
 
 // Handler para geração e regeneração de imagens

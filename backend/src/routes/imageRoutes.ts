@@ -101,13 +101,16 @@ router.post('/regenerate', async (req, res, next) => {
 
 router.post('/edit', async (req, res, next) => {
   try {
-    const { imageBase64, prompt, size, apiKey } = req.body ?? {};
+    const { imageBase64, prompt, size, apiKey, totalImages, imageIndex, nodeName } = req.body ?? {};
 
     console.log('[Images][edit] Incoming request', {
       imageLength: typeof imageBase64 === 'string' ? imageBase64.length : 'invalid',
       promptLength: typeof prompt === 'string' ? prompt.length : 'invalid',
       size,
       providedApiKey: Boolean(apiKey),
+      totalImages,
+      imageIndex,
+      nodeName,
     });
 
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -123,10 +126,16 @@ router.post('/edit', async (req, res, next) => {
       prompt,
       size,
       apiKey,
+      totalImages,
+      imageIndex,
+      nodeName,
     });
 
     console.log('[Images][edit] Completed', {
       hasBase64: Boolean(result?.base64),
+      totalImages,
+      imageIndex,
+      nodeName,
     });
 
     res.json(result);

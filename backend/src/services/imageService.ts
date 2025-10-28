@@ -1,6 +1,6 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { Buffer } from 'node:buffer';
-import { toFile } from 'openai/uploads';
+import { toFile, type FileLike } from 'openai/uploads';
 import { resolveApiKey } from '../utils/apiKey';
 import { createOpenAIClient, handleOpenAIError } from './openaiClient';
 
@@ -40,6 +40,9 @@ interface ImageEditInput {
   prompt: string;
   size?: SupportedImageSize | null;
   apiKey?: string;
+  totalImages?: number;
+  imageIndex?: number;
+  nodeName?: string;
 }
 
 interface ImageEditOutput {
@@ -80,7 +83,7 @@ export async function generateImage({
       model: 'gpt-image-1',
       prompt: adjustedPrompt,
       size: sizeParam,
-      response_format: 'b64_json',
+      ...(transparent ? { background: 'transparent' as const } : {}),
     })) as ImageGenerationResponse;
     const base64 = response.data?.[0]?.b64_json;
 
@@ -187,12 +190,25 @@ export async function editImage({
   prompt,
   size = '1024x1024',
   apiKey,
+  totalImages,
+  imageIndex,
+  nodeName,
 }: ImageEditInput): Promise<ImageEditOutput> {
   const key = resolveApiKey(apiKey);
 
   const client = createOpenAIClient(key);
 
-  const imageFile = await toFile(Buffer.from(imageBase64, 'base64'), 'image.png');
+  const imageFile = await createImageFile(imageBase64);
+
+  if (typeof totalImages === 'number' || typeof imageIndex === 'number') {
+    const position = typeof totalImages === 'number' && typeof imageIndex === 'number'
+      ? `${imageIndex}/${totalImages}`
+      : imageIndex ?? totalImages;
+    console.log('[Images][edit] Processing image', {
+      position,
+      nodeName,
+    });
+  }
 
   try {
     const sizeParam = size ?? undefined;
@@ -202,7 +218,6 @@ export async function editImage({
       prompt,
       n: 1,
       size: sizeParam,
-      response_format: 'b64_json',
     })) as ImageGenerationResponse;
     const base64 = response.data?.[0]?.b64_json;
 
@@ -216,4 +231,45 @@ export async function editImage({
   }
 
   throw new Error('Unhandled OpenAI error during image edit.');
+}
+
+async function createImageFile(imageBase64: string): Promise<FileLike> {
+  const base64Payload = imageBase64.includes(',')
+    ? imageBase64.split(',')[1] ?? ''
+    : imageBase64;
+  const sanitizedBase64 = base64Payload.trim().replace(/\s+/g, '');
+  const buffer = Buffer.from(sanitizedBase64, 'base64');
+
+  if (buffer.length === 0) {
+    throw new Error('Imagem vazia fornecida para edição.');
+  }
+
+  const mime = detectMime(buffer);
+  if (!mime) {
+    throw new Error('Formato de imagem não suportado. Envie PNG, JPEG ou WEBP.');
+  }
+
+  const extension = mime.split('/')[1];
+  return toFile(buffer, `image.${extension}`, { type: mime });
+}
+
+function detectMime(buffer: Buffer): 'image/png' | 'image/jpeg' | 'image/webp' | null {
+  const pngSignature = Buffer.from('89504e470d0a1a0a', 'hex');
+  if (buffer.slice(0, 8).equals(pngSignature)) {
+    return 'image/png';
+  }
+
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+
+  if (
+    buffer.length >= 12 &&
+    buffer.slice(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.slice(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+
+  return null;
 }

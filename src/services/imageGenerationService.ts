@@ -17,6 +17,12 @@ interface EditImageResponse {
   base64: string;
 }
 
+interface EditImageMetadata {
+  totalImages?: number;
+  imageIndex?: number;
+  nodeName?: string;
+}
+
 export class ImageGenerationService {
   private static readonly base64Chars =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
@@ -179,7 +185,8 @@ export class ImageGenerationService {
     imageBytes: Uint8Array,
     prompt: string,
     apiKey?: string,
-    size = '1024x1024'
+    size = '1024x1024',
+    metadata?: EditImageMetadata
   ): Promise<Uint8Array> {
     console.log('🖌️ Forwarding image edit request to backend...');
     const base64 = this.uint8ArrayToBase64(imageBytes);
@@ -188,6 +195,9 @@ export class ImageGenerationService {
       prompt,
       size,
       apiKey,
+      totalImages: metadata?.totalImages,
+      imageIndex: metadata?.imageIndex,
+      nodeName: metadata?.nodeName,
     });
     console.log('✅ Backend returned edited image');
     return this.base64ToUint8Array(response.base64);

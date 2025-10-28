@@ -12,6 +12,14 @@ const API_KEY_STORAGE_KEY = 'figma-ai-assistant-api-key';
 const BACKEND_URL_STORAGE_KEY = 'figma-ai-assistant-backend-url';
 
 let aiAssistant: AIDesignAssistant;
+interface PendingFrameEditContext {
+  frameId: string;
+  frameName: string;
+  nodeIds: string[];
+  size?: string;
+}
+
+let pendingFrameEditContext: PendingFrameEditContext | null = null;
 
 export default function runPlugin() {
   showUI({ width: 400, height: 500 });
@@ -174,8 +182,19 @@ function initializeUiMessageHandler() {
       await handleImageGeneration(msg, true);
       
     } else if (msg.type === 'edit-frame-images') {
-      console.log('🖼️ Starting frame image editing...');
-      await handleFrameImageEditing(msg);
+      console.log('🖼️ Preparing frame image editing preview...');
+      await prepareFrameImageEditing(msg);
+    } else if (msg.type === 'confirm-edit-frame-images') {
+      console.log('✅ Confirming frame image editing...');
+      await executePendingFrameImageEditing({
+        prompt: msg.prompt,
+        apiKey: msg.apiKey,
+        size: msg.size,
+      });
+    } else if (msg.type === 'cancel-edit-frame-images') {
+      console.log('🚫 Cancelling frame image editing...');
+      pendingFrameEditContext = null;
+      figma.ui.postMessage({ type: 'image-edit-cancelled' });
     }
   } catch (error: any) {
     figma.notify(`❌ Erro: ${error.message}`, { timeout: 5000 });
@@ -375,11 +394,8 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
 }
 
 // Handler para edição em lote de imagens dentro de um frame
-async function handleFrameImageEditing(msg: any) {
+async function prepareFrameImageEditing(msg: any) {
   try {
-    const { ImageGenerationService } = await import('./services/imageGenerationService');
-    
-    // Verifica se há um frame selecionado
     const selection = figma.currentPage.selection;
     if (selection.length !== 1) {
       figma.ui.postMessage({
@@ -387,9 +403,10 @@ async function handleFrameImageEditing(msg: any) {
         message: 'Please select exactly one frame for image editing',
         context: 'image-edit'
       });
+      pendingFrameEditContext = null;
       return;
     }
-    
+
     const selectedNode = selection[0];
     if (selectedNode.type !== 'FRAME') {
       figma.ui.postMessage({
@@ -397,104 +414,169 @@ async function handleFrameImageEditing(msg: any) {
         message: 'Please select a Frame (not a group or other element)',
         context: 'image-edit'
       });
+      pendingFrameEditContext = null;
       return;
     }
-    
-    // Função recursiva para encontrar todos os nós com imagens
-    function findImageNodes(node: SceneNode): SceneNode[] {
-      const imageNodes: SceneNode[] = [];
-      
-      // Verifica se o nó atual tem uma imagem
-      if ('fills' in node && node.fills && Array.isArray(node.fills)) {
-        const hasImage = node.fills.some(fill => fill.type === 'IMAGE');
-        if (hasImage) {
-          imageNodes.push(node);
-        }
-      }
-      
-      // Busca recursivamente nos filhos
-      if ('children' in node) {
-        for (const child of node.children) {
-          imageNodes.push(...findImageNodes(child));
-        }
-      }
-      
-      return imageNodes;
-    }
-    
+
     const imageNodes = findImageNodes(selectedNode);
-    
+
     if (imageNodes.length === 0) {
       figma.ui.postMessage({
         type: 'error',
         message: 'No images found within the selected frame',
         context: 'image-edit'
       });
+      pendingFrameEditContext = null;
       return;
     }
-    
+
+    pendingFrameEditContext = {
+      frameId: selectedNode.id,
+      frameName: selectedNode.name,
+      nodeIds: imageNodes.map((node) => node.id),
+      size: msg.size,
+    };
+
     console.log(`🖼️ Found ${imageNodes.length} image(s) in frame: ${selectedNode.name}`);
-    
+
+    const summaries = imageNodes.map((node, index) => ({
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      index: index + 1,
+      width: 'width' in node ? Math.round((node as any).width) : undefined,
+      height: 'height' in node ? Math.round((node as any).height) : undefined,
+    }));
+
+    figma.ui.postMessage({
+      type: 'image-edit-summary',
+      frameName: selectedNode.name,
+      totalImages: imageNodes.length,
+      images: summaries,
+    });
+  } catch (error) {
+    console.log('❌ Frame image preview error:', error);
+    pendingFrameEditContext = null;
+    figma.ui.postMessage({
+      type: 'error',
+      message: error instanceof Error ? error.message : 'Unknown error preparing frame image editing',
+      context: 'image-edit'
+    });
+  }
+}
+
+async function executePendingFrameImageEditing({ prompt, apiKey, size }: { prompt: string; apiKey?: string; size?: string; }) {
+  if (!pendingFrameEditContext) {
+    figma.ui.postMessage({
+      type: 'error',
+      message: 'No pending frame image edit found. Please scan the frame again.',
+      context: 'image-edit'
+    });
+    return;
+  }
+
+  const sanitizedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
+  if (!sanitizedPrompt) {
+    figma.ui.postMessage({
+      type: 'error',
+      message: 'Please provide an editing prompt to continue.',
+      context: 'image-edit'
+    });
+    return;
+  }
+
+  try {
+    const frameNode = figma.getNodeById(pendingFrameEditContext.frameId);
+    if (!frameNode || frameNode.type !== 'FRAME') {
+      figma.ui.postMessage({
+        type: 'error',
+        message: 'The selected frame is no longer available. Please select it again.',
+        context: 'image-edit'
+      });
+      pendingFrameEditContext = null;
+      return;
+    }
+
+    const allImageNodes = findImageNodes(frameNode);
+    const nodesToEdit = pendingFrameEditContext.nodeIds
+      .map((id) => allImageNodes.find((node) => node.id === id) ?? null)
+      .filter((node): node is SceneNode => Boolean(node));
+
+    if (nodesToEdit.length === 0) {
+      figma.ui.postMessage({
+        type: 'error',
+        message: 'No images matched the original selection. Please scan the frame again.',
+        context: 'image-edit'
+      });
+      pendingFrameEditContext = null;
+      return;
+    }
+
+    if (nodesToEdit.length < pendingFrameEditContext.nodeIds.length) {
+      const skipped = pendingFrameEditContext.nodeIds.length - nodesToEdit.length;
+      console.log(`⚠️ Detected ${skipped} image(s) removed or changed since the preview. They will be skipped.`);
+      figma.notify(`⚠️ ${skipped} image(s) changed after the preview and were skipped.`, { timeout: 3000 });
+    }
+
+    const { ImageGenerationService } = await import('./services/imageGenerationService');
+
+    const sizeToUse = size ?? pendingFrameEditContext.size;
+
     figma.ui.postMessage({
       type: 'image-edit-progress',
-      message: `Found ${imageNodes.length} image(s) in frame. Starting editing...`,
+      message: `Editing ${nodesToEdit.length} image(s) in parallel...`,
       step: 1,
       totalSteps: 3
     });
-    
-    // PROCESSAMENTO EM PARALELO - Edição de todas as imagens simultaneamente
-    const editingPromises = imageNodes.map(async (node, index) => {
+
+    const editingPromises = nodesToEdit.map(async (node, index) => {
       try {
-        console.log(`🖼️ [PARALLEL] Starting editing ${index + 1}/${imageNodes.length}: ${node.name}`);
-        
-        // Extrai a imagem atual
+        console.log(`🖼️ [PARALLEL] Editing ${index + 1}/${nodesToEdit.length}: ${node.name}`);
         const imageFill = (node as any).fills.find((fill: any) => fill.type === 'IMAGE');
         if (!imageFill) {
           console.log(`⚠️ [PARALLEL] No image fill found for ${node.name}`);
           return { success: false, node, error: 'No image fill found' };
         }
-        
+
         const image = figma.getImageByHash(imageFill.imageHash);
         if (!image) {
           console.log(`⚠️ [PARALLEL] Image hash not found for ${node.name}`);
           return { success: false, node, error: 'Image hash not found' };
         }
-        
+
         const imageBytes = await image.getBytesAsync();
-        
-        // Edita a imagem usando o prompt fornecido
-        const editedImageBytes = await ImageGenerationService.editImage(imageBytes, msg.prompt, msg.apiKey);
-        console.log(`✅ [PARALLEL] Successfully edited ${node.name}`);
-        
+
+        const editedImageBytes = await ImageGenerationService.editImage(
+          imageBytes,
+          sanitizedPrompt,
+          apiKey,
+          sizeToUse,
+          {
+            totalImages: nodesToEdit.length,
+            imageIndex: index + 1,
+            nodeName: node.name,
+          }
+        );
+
         return { success: true, node, editedImageBytes, error: null };
-        
       } catch (error) {
         console.log(`❌ [PARALLEL] Error editing image for ${node.name}:`, error);
         return { success: false, node, error: error instanceof Error ? error.message : 'Unknown error' };
       }
     });
-    
-    figma.ui.postMessage({
-      type: 'image-edit-progress',
-      message: `Editing ${imageNodes.length} images in parallel...`,
-      step: 2,
-      totalSteps: 3
-    });
-    
-    // Aguarda todas as edições terminarem
+
     const results = await Promise.all(editingPromises);
-    
+
     figma.ui.postMessage({
       type: 'image-edit-progress',
       message: `Applying edited images to Figma...`,
-      step: 3,
+      step: 2,
       totalSteps: 3
     });
-    
-    // Aplica as imagens editadas sequencialmente (interação com Figma deve ser sequencial)
+
     let successCount = 0;
     let errorCount = 0;
-    
+
     for (const result of results) {
       if (result.success && result.editedImageBytes) {
         try {
@@ -512,19 +594,25 @@ async function handleFrameImageEditing(msg: any) {
         errorCount++;
       }
     }
-    
-    const message = errorCount > 0 
-      ? `Edited ${successCount}/${imageNodes.length} image(s) (${errorCount} failed)`
+
+    figma.ui.postMessage({
+      type: 'image-edit-progress',
+      message: 'Finalizing edits...',
+      step: 3,
+      totalSteps: 3
+    });
+
+    const message = errorCount > 0
+      ? `Edited ${successCount}/${nodesToEdit.length} image(s) (${errorCount} failed)`
       : `Successfully edited all ${successCount} image(s)!`;
-    
+
     figma.ui.postMessage({
       type: 'image-edit-complete',
-      message: message
+      message
     });
-    
+
     figma.notify(`✅ ${message}`, { timeout: 3000 });
     console.log(`🎉 [PARALLEL] Image editing complete: ${successCount} success, ${errorCount} errors`);
-    
   } catch (error) {
     console.log('❌ Frame image editing error:', error);
     figma.ui.postMessage({
@@ -533,5 +621,26 @@ async function handleFrameImageEditing(msg: any) {
       context: 'image-edit'
     });
     figma.notify(`❌ Frame image editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
+  } finally {
+    pendingFrameEditContext = null;
   }
+}
+
+function findImageNodes(node: SceneNode): SceneNode[] {
+  const imageNodes: SceneNode[] = [];
+
+  if ('fills' in node && node.fills && Array.isArray(node.fills)) {
+    const hasImage = node.fills.some((fill) => fill.type === 'IMAGE');
+    if (hasImage) {
+      imageNodes.push(node);
+    }
+  }
+
+  if ('children' in node) {
+    for (const child of node.children) {
+      imageNodes.push(...findImageNodes(child));
+    }
+  }
+
+  return imageNodes;
 }

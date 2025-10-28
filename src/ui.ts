@@ -499,8 +499,8 @@ const template = `
       Duplica e redimensiona o frame 1080x1080 selecionado para novos formatos verticais.
     </div>
     <div class="quick-actions">
-      <button id="resizeTo1320Btn" type="button">
-        Vertical (1080x1320)
+      <button id="resizeTo1350Btn" type="button">
+        Vertical (1080x1350)
       </button>
       <button id="resizeTo1920Btn" type="button">
         Story (1080x1920)
@@ -794,15 +794,15 @@ function initImageEditing(): void {
 }
 
 function initResize(): void {
-  const resizeTo1320Btn = getElement<HTMLButtonElement>('resizeTo1320Btn');
+  const resizeTo1350Btn = getElement<HTMLButtonElement>('resizeTo1350Btn');
   const resizeTo1920Btn = getElement<HTMLButtonElement>('resizeTo1920Btn');
   const resultResize = getElement<HTMLDivElement>('resultResize');
 
-  resizeTo1320Btn.addEventListener('click', () => {
-    console.log('📏 Stretching frame to 1080x1320...');
+  resizeTo1350Btn.addEventListener('click', () => {
+    console.log('📏 Stretching frame to 1080x1350...');
     resultResize.innerHTML = '';
     resultResize.className = '';
-    postPluginMessage({ type: 'resize-frame-stretch', newHeight: 1320 });
+    postPluginMessage({ type: 'resize-frame-stretch', newHeight: 1350 });
   });
 
   resizeTo1920Btn.addEventListener('click', () => {

@@ -181,9 +181,13 @@ function initializeUiMessageHandler() {
       console.log('🔄 Starting image regeneration...');
       await handleImageGeneration(msg, true);
       
-    } else if (msg.type === 'resize-frame') {
-      console.log(`📏 Starting frame resize to height: ${msg.newHeight}`);
-      await handleFrameResize(Number(msg.newHeight));
+    } else if (msg.type === 'resize-frame-stretch') {
+      console.log(`📏 Starting frame stretch to height: ${msg.newHeight}`);
+      await handleFrameStretch(Number(msg.newHeight));
+      
+    } else if (msg.type === 'resize-frame-reflow') {
+      console.log(`📏 Starting frame reflow to height: ${msg.newHeight}`);
+      await handleFrameReflow(Number(msg.newHeight));
       
     } else if (msg.type === 'edit-frame-images') {
       console.log('🖼️ Preparing frame image editing preview...');
@@ -206,7 +210,7 @@ function initializeUiMessageHandler() {
     console.error('Plugin error:', error);
 
     const context =
-      msg.type === 'resize-frame'
+      msg.type === 'resize-frame-stretch' || msg.type === 'resize-frame-reflow'
         ? 'resize'
         : msg.type === 'generate-image' || msg.type === 'regenerate-images'
           ? 'image'
@@ -646,7 +650,7 @@ async function executePendingFrameImageEditing({ prompt, apiKey, size }: { promp
   }
 }
 
-async function handleFrameResize(newHeight: number) {
+async function handleFrameReflow(newHeight: number) {
   if (typeof newHeight !== 'number' || Number.isNaN(newHeight) || newHeight <= 0) {
     throw new Error('Altura inválida fornecida para redimensionamento.');
   }
@@ -681,6 +685,69 @@ async function handleFrameResize(newHeight: number) {
     frameWithResize.resize(oldWidth, newHeight);
   }
 
+  const heightDifference = newHeight - oldHeight;
+  const bottomThresholdOriginal = oldHeight * 0.6;
+  let backgroundNode: (SceneNode & { resize: (width: number, height: number) => void }) | undefined;
+
+  for (const child of newFrame.children) {
+    const normalizedName = child.name.toLowerCase();
+    const childWidth = typeof (child as any).width === 'number' ? ((child as any).width as number) : undefined;
+    const childHeight = typeof (child as any).height === 'number' ? ((child as any).height as number) : undefined;
+    const childTop = 'y' in child ? (child as SceneNode & { y: number }).y : 0;
+
+    const coversFrame =
+      typeof childWidth === 'number' &&
+      typeof childHeight === 'number' &&
+      childWidth >= oldWidth * 0.95 &&
+      childHeight >= oldHeight * 0.95 &&
+      childTop <= oldHeight * 0.1;
+
+    const isPotentialBackground =
+      normalizedName.includes('bg') ||
+      normalizedName.includes('background') ||
+      coversFrame;
+
+    if (!backgroundNode && isPotentialBackground && 'resize' in child) {
+      backgroundNode = child as SceneNode & { resize: (width: number, height: number) => void };
+    }
+  }
+
+  if (backgroundNode) {
+    const widthForResize =
+      typeof (backgroundNode as any).width === 'number'
+        ? ((backgroundNode as any).width as number)
+        : oldWidth;
+    console.log(`📏 Esticando background: ${backgroundNode.name}`);
+    try {
+      backgroundNode.resize(widthForResize, newHeight);
+    } catch (error) {
+      console.log('⚠️ Não foi possível esticar o background detectado:', error);
+    }
+  }
+
+  for (const child of newFrame.children) {
+    if (child === backgroundNode) {
+      continue;
+    }
+
+    if (!('y' in child)) {
+      continue;
+    }
+
+    const childNode = child as SceneNode & { y: number };
+    const childHeight =
+      typeof (child as any).height === 'number' ? ((child as any).height as number) : 0;
+    const childCenterYOriginal = childNode.y + childHeight / 2;
+    const constraints = (child as any).constraints as { vertical?: string } | undefined;
+    const verticalConstraint = constraints?.vertical ?? 'MIN';
+    const isFooterElement = childCenterYOriginal > bottomThresholdOriginal;
+
+    if (isFooterElement && verticalConstraint === 'MIN') {
+      console.log(`🚚 Movendo elemento de rodapé: ${child.name}`);
+      childNode.y += heightDifference;
+    }
+  }
+
   figma.currentPage.selection = [newFrame];
   figma.viewport.scrollAndZoomIntoView([newFrame]);
 
@@ -706,4 +773,71 @@ function findImageNodes(node: SceneNode): SceneNode[] {
   }
 
   return imageNodes;
+}
+
+async function handleFrameStretch(newHeight: number) {
+  if (typeof newHeight !== 'number' || Number.isNaN(newHeight) || newHeight <= 0) {
+    throw new Error('Altura inválida fornecida para redimensionamento.');
+  }
+
+  const selection = figma.currentPage.selection;
+
+  if (selection.length !== 1 || selection[0].type !== 'FRAME') {
+    throw new Error('Por favor, selecione um único frame para redimensionar.');
+  }
+
+  const baseFrame = selection[0] as FrameNode;
+  const oldWidth = baseFrame.width;
+  const oldHeight = baseFrame.height;
+
+  if (Math.round(oldHeight) === Math.round(newHeight)) {
+    throw new Error('O frame já possui a altura desejada.');
+  }
+
+  if (newHeight < oldHeight) {
+    throw new Error('Esta função só suporta aumentar a altura do frame selecionado.');
+  }
+
+  const stretchRatio = newHeight / oldHeight;
+  const newFrame = baseFrame.clone();
+  newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)}) [Stretch]`;
+  newFrame.x = baseFrame.x + baseFrame.width + 100;
+  newFrame.y = baseFrame.y;
+
+  const frameWithResize = newFrame as FrameNode;
+  if (typeof frameWithResize.resizeWithoutConstraints === 'function') {
+    frameWithResize.resizeWithoutConstraints(oldWidth, newHeight);
+  } else {
+    frameWithResize.resize(oldWidth, newHeight);
+  }
+
+  for (const child of newFrame.children) {
+    if ('y' in child) {
+      const childNode = child as SceneNode & { y: number };
+      childNode.y *= stretchRatio;
+    }
+
+    if ('resize' in child && typeof (child as any).height === 'number') {
+      const resizableChild = child as SceneNode & {
+        resize: (width: number, height: number) => void;
+      };
+      const childWidth = typeof (child as any).width === 'number' ? ((child as any).width as number) : undefined;
+      const childHeight = (child as any).height as number;
+
+      if (typeof childWidth === 'number') {
+        try {
+          resizableChild.resize(childWidth, childHeight * stretchRatio);
+        } catch (error) {
+          console.log(`⚠️ Falha ao esticar ${child.name}:`, error);
+        }
+      }
+    }
+  }
+
+  figma.currentPage.selection = [newFrame];
+  figma.viewport.scrollAndZoomIntoView([newFrame]);
+
+  const successMsg = `✅ Frame esticado para ${Math.round(oldWidth)}x${Math.round(newHeight)}!`;
+  figma.notify(successMsg);
+  figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
 }

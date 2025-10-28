@@ -798,15 +798,19 @@ function initResize(): void {
   const resizeTo1920Btn = getElement<HTMLButtonElement>('resizeTo1920Btn');
   const resultResize = getElement<HTMLDivElement>('resultResize');
 
-  const triggerResize = (newHeight: number) => {
-    console.log(`📏 Resizing frame to height ${newHeight}...`);
+  resizeTo1320Btn.addEventListener('click', () => {
+    console.log('📏 Stretching frame to 1080x1320...');
     resultResize.innerHTML = '';
     resultResize.className = '';
-    postPluginMessage({ type: 'resize-frame', newHeight });
-  };
+    postPluginMessage({ type: 'resize-frame-stretch', newHeight: 1320 });
+  });
 
-  resizeTo1320Btn.addEventListener('click', () => triggerResize(1320));
-  resizeTo1920Btn.addEventListener('click', () => triggerResize(1920));
+  resizeTo1920Btn.addEventListener('click', () => {
+    console.log('📏 Reflowing frame to 1080x1920...');
+    resultResize.innerHTML = '';
+    resultResize.className = '';
+    postPluginMessage({ type: 'resize-frame-reflow', newHeight: 1920 });
+  });
 }
 
 function initClose(): void {

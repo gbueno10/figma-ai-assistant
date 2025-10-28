@@ -487,13 +487,31 @@ const template = `
           <div class="progress-bar" id="progressBarEditImages"></div>
         </div>
         <div class="progress-text" id="progressTextEditImages"></div>
-      </div>
-      <div id="resultEditImages"></div>
     </div>
+    <div id="resultEditImages"></div>
+  </div>
 
-    <div class="ai-card">
-      <div class="card-title">
-        🎨 AI Design Modification
+  <div class="ai-card">
+    <div class="card-title">
+      📏 Redimensionamento Rápido
+    </div>
+    <div class="card-description">
+      Duplica e redimensiona o frame 1080x1080 selecionado para novos formatos verticais.
+    </div>
+    <div class="quick-actions">
+      <button id="resizeTo1320Btn" type="button">
+        Vertical (1080x1320)
+      </button>
+      <button id="resizeTo1920Btn" type="button">
+        Story (1080x1920)
+      </button>
+    </div>
+    <div id="resultResize"></div>
+  </div>
+
+  <div class="ai-card">
+    <div class="card-title">
+      🎨 AI Design Modification
       </div>
       <div class="card-description">
         Describe your desired changes in natural language and let AI transform your design intelligently.
@@ -558,6 +576,7 @@ export default function initUI(rootNode: HTMLElement): void {
   initImageEditing();
   initAnalyze();
   initModify();
+  initResize();
   initClose();
   registerMessageListener();
   loadSettings();
@@ -772,6 +791,22 @@ function initImageEditing(): void {
     editImagesBtn.disabled = false;
     getElement<HTMLDivElement>('resultEditImages').innerHTML = '';
   });
+}
+
+function initResize(): void {
+  const resizeTo1320Btn = getElement<HTMLButtonElement>('resizeTo1320Btn');
+  const resizeTo1920Btn = getElement<HTMLButtonElement>('resizeTo1920Btn');
+  const resultResize = getElement<HTMLDivElement>('resultResize');
+
+  const triggerResize = (newHeight: number) => {
+    console.log(`📏 Resizing frame to height ${newHeight}...`);
+    resultResize.innerHTML = '';
+    resultResize.className = '';
+    postPluginMessage({ type: 'resize-frame', newHeight });
+  };
+
+  resizeTo1320Btn.addEventListener('click', () => triggerResize(1320));
+  resizeTo1920Btn.addEventListener('click', () => triggerResize(1920));
 }
 
 function initClose(): void {
@@ -1028,6 +1063,13 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       break;
     }
 
+    case 'resize-complete': {
+      const message = typeof msg.message === 'string' ? msg.message : 'Frame resized successfully!';
+      showResult(message, 'success', 'resultResize');
+      console.log('✅ Resize completed');
+      break;
+    }
+
     case 'modification-complete': {
       getElement<HTMLDivElement>('loadingModify').style.display = 'none';
       getElement<HTMLButtonElement>('modifyBtn').disabled = false;
@@ -1048,13 +1090,17 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       getElement<HTMLButtonElement>('generateBtn').disabled = false;
       getElement<HTMLDivElement>('loadingEditImages').style.display = 'none';
       getElement<HTMLButtonElement>('editImagesBtn').disabled = false;
-      clearImageEditPreview();
+      if (msg.context === 'image-edit') {
+        clearImageEditPreview();
+      }
 
       const message = typeof msg.message === 'string' ? msg.message : 'Unknown error';
       if (msg.context === 'image') {
         showResult(`❌ ${message}`, 'error', 'resultImage');
       } else if (msg.context === 'image-edit') {
         showResult(`❌ ${message}`, 'error', 'resultEditImages');
+      } else if (msg.context === 'resize') {
+        showResult(`❌ ${message}`, 'error', 'resultResize');
       } else {
         showResult(`❌ ${message}`, 'error', 'resultModify');
       }

@@ -181,6 +181,10 @@ function initializeUiMessageHandler() {
       console.log('🔄 Starting image regeneration...');
       await handleImageGeneration(msg, true);
       
+    } else if (msg.type === 'resize-frame') {
+      console.log(`📏 Starting frame resize to height: ${msg.newHeight}`);
+      await handleFrameResize(Number(msg.newHeight));
+      
     } else if (msg.type === 'edit-frame-images') {
       console.log('🖼️ Preparing frame image editing preview...');
       await prepareFrameImageEditing(msg);
@@ -197,8 +201,24 @@ function initializeUiMessageHandler() {
       figma.ui.postMessage({ type: 'image-edit-cancelled' });
     }
   } catch (error: any) {
-    figma.notify(`❌ Erro: ${error.message}`, { timeout: 5000 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    figma.notify(`❌ Erro: ${errorMessage}`, { timeout: 5000 });
     console.error('Plugin error:', error);
+
+    const context =
+      msg.type === 'resize-frame'
+        ? 'resize'
+        : msg.type === 'generate-image' || msg.type === 'regenerate-images'
+          ? 'image'
+          : msg.type === 'edit-frame-images' || msg.type === 'confirm-edit-frame-images'
+            ? 'image-edit'
+            : 'general';
+
+    figma.ui.postMessage({
+      type: 'error',
+      message: errorMessage,
+      context,
+    });
   }
 };
 
@@ -624,6 +644,49 @@ async function executePendingFrameImageEditing({ prompt, apiKey, size }: { promp
   } finally {
     pendingFrameEditContext = null;
   }
+}
+
+async function handleFrameResize(newHeight: number) {
+  if (typeof newHeight !== 'number' || Number.isNaN(newHeight) || newHeight <= 0) {
+    throw new Error('Altura inválida fornecida para redimensionamento.');
+  }
+
+  const selection = figma.currentPage.selection;
+
+  if (selection.length !== 1 || selection[0].type !== 'FRAME') {
+    throw new Error('Por favor, selecione um único frame para redimensionar.');
+  }
+
+  const baseFrame = selection[0] as FrameNode;
+  const oldWidth = baseFrame.width;
+  const oldHeight = baseFrame.height;
+
+  if (Math.round(oldHeight) === Math.round(newHeight)) {
+    throw new Error('O frame já possui a altura desejada.');
+  }
+
+  if (newHeight < oldHeight) {
+    throw new Error('Esta função só suporta aumentar a altura do frame selecionado.');
+  }
+
+  const newFrame = baseFrame.clone();
+  newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)})`;
+  newFrame.x = baseFrame.x + baseFrame.width + 100;
+  newFrame.y = baseFrame.y;
+
+  const frameWithResize = newFrame as FrameNode;
+  if (typeof frameWithResize.resizeWithoutConstraints === 'function') {
+    frameWithResize.resizeWithoutConstraints(oldWidth, newHeight);
+  } else {
+    frameWithResize.resize(oldWidth, newHeight);
+  }
+
+  figma.currentPage.selection = [newFrame];
+  figma.viewport.scrollAndZoomIntoView([newFrame]);
+
+  const successMsg = `✅ Frame redimensionado para ${Math.round(oldWidth)}x${Math.round(newHeight)}!`;
+  figma.notify(successMsg);
+  figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
 }
 
 function findImageNodes(node: SceneNode): SceneNode[] {

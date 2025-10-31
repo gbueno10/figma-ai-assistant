@@ -9,6 +9,16 @@ export class ColorUtils {
     return `rgb(${r}, ${g}, ${b})`;
   }
 
+  static figmaColorToHex(color: RGB): string {
+    const r = Math.round(color.r * 255);
+    const g = Math.round(color.g * 255);
+    const b = Math.round(color.b * 255);
+
+    const toHex = (value: number) => value.toString(16).padStart(2, '0').toUpperCase();
+
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+
   // Parse string de cor para RGB Figma
   static parseColor(colorString: string): RGB | null {
     if (colorString.includes('#')) {

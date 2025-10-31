@@ -56,6 +56,16 @@ router.post('/modifications', async (req, res, next) => {
       return res.status(400).json({ error: 'Field "types" is required and must be an array of strings.' });
     }
 
+    try {
+      const serializedAnalysis =
+        typeof designAnalysis === 'string' ? designAnalysis : JSON.stringify(designAnalysis);
+      console.log('[Design][modifications] Design analysis size', {
+        characters: serializedAnalysis.length,
+      });
+    } catch (serializationError) {
+      console.warn('[Design][modifications] Could not compute analysis size', serializationError);
+    }
+
     const result = await requestDesignModifications({ designAnalysis, prompt, types, apiKey });
     const modificationCount = Array.isArray((result as any)?.modifications)
       ? (result as any).modifications.length

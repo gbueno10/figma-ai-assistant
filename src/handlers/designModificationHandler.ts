@@ -38,6 +38,14 @@ export class DesignModificationHandler {
       // Step 2: Analyze current design state (passing types)
       console.log(`⏱️ [${Date.now() - startTime}ms] Step 2: Analyzing design state...`);
       const designAnalysis = await this.analyzeDesignForModification(selectedNodes, types);
+      try {
+        const analysisPayload = JSON.stringify(designAnalysis);
+        console.log(
+          `📦 Design analysis payload size: ${analysisPayload.length.toLocaleString()} characters`
+        );
+      } catch (serializationError) {
+        console.log('⚠️ Failed to compute design analysis payload size:', serializationError);
+      }
       
       // Progress update
       figma.ui.postMessage({
@@ -155,8 +163,10 @@ export class DesignModificationHandler {
     };
 
     for (const node of nodes) {
-      const element = this.analyzeNodeForModification(node, types);
-      analysis.elements.push(element);
+      const element = this.analyzeNodeForModification(node, types, true);
+      if (element) {
+        analysis.elements.push(element);
+      }
     }
 
     analysis.totalElements = analysis.elements.length;
@@ -293,70 +303,99 @@ export class DesignModificationHandler {
   }
 
   // Analyze individual node for modification with conditional property inclusion
-  static analyzeNodeForModification(node: SceneNode, types: string[]): any {
+  static analyzeNodeForModification(node: SceneNode, types: string[], isRoot = false): any {
     // Propriedades base que são sempre necessárias
     const element: any = {
       id: node.id,
       name: node.name,
-      type: node.type,
-      children: []
+      type: node.type
     };
+
+    const rounded = (value: number) => Math.round(value * 100) / 100;
+    const childElements: any[] = [];
 
     // --- Início da Lógica Condicional ---
 
     // Adiciona dados de LAYOUT
     if (types.includes('layout')) {
-      element.x = node.x;
-      element.y = node.y;
-      element.width = node.width;
-      element.height = node.height;
+      element.x = rounded(node.x);
+      element.y = rounded(node.y);
+      element.width = rounded(node.width);
+      element.height = rounded(node.height);
     }
 
     // Adiciona dados de TEXTO
     if (types.includes('text') && node.type === 'TEXT') {
       const textNode = node as TextNode;
       element.text = textNode.characters;
-      element.fontSize = textNode.fontSize;
-      element.fontName = textNode.fontName;
+      if (typeof textNode.fontSize === 'number') {
+        element.fontSize = rounded(textNode.fontSize);
+      }
+
+      const fontName = textNode.fontName;
+      if (typeof fontName === 'object' && 'family' in fontName && 'style' in fontName) {
+        element.fontFamily = fontName.family;
+        element.fontStyle = fontName.style;
+      }
     }
 
     // Adiciona dados de COR
     if (types.includes('color')) {
-      element.hasColor = false; // Começa como falso
-      element.colors = [];
+      const colors: any[] = [];
+      let hasColor = false;
 
       // Lógica para 'fills'
       if ('fills' in node && Array.isArray(node.fills) && node.fills.length > 0) {
         const visibleFills = node.fills.filter(fill => fill.visible !== false && fill.type === 'SOLID');
         if (visibleFills.length > 0) {
-          element.hasColor = true;
+          hasColor = true;
           for (const fill of visibleFills) {
-            element.colors.push({
+            const opacity = rounded((fill as SolidPaint).opacity ?? 1);
+            const fillData: any = {
               type: 'fill',
-              color: (fill as SolidPaint).color,
-              opacity: (fill as SolidPaint).opacity || 1
-            });
+              color: ColorUtils.figmaColorToHex((fill as SolidPaint).color)
+            };
+
+            if (opacity !== 1) {
+              fillData.opacity = opacity;
+            }
+
+            colors.push(fillData);
           }
         }
       }
-      
+
       // Lógica para 'strokes'
       if ('strokes' in node && Array.isArray(node.strokes) && node.strokes.length > 0) {
-        const strokeWeight = 'strokeWeight' in node ? (node as any).strokeWeight : 0;
-        if (strokeWeight > 0) {
+        const strokeWeightValue = 'strokeWeight' in node ? (node as any).strokeWeight : 0;
+        if (typeof strokeWeightValue === 'number' && strokeWeightValue > 0) {
           const visibleStrokes = node.strokes.filter(stroke => stroke.visible !== false && stroke.type === 'SOLID');
           if (visibleStrokes.length > 0) {
-            element.hasColor = true;
+            hasColor = true;
             for (const stroke of visibleStrokes) {
-              element.colors.push({
+              const opacity = rounded((stroke as SolidPaint).opacity ?? 1);
+              const strokeData: any = {
                 type: 'stroke',
-                color: (stroke as SolidPaint).color,
-                opacity: (stroke as SolidPaint).opacity || 1,
-                strokeWeight: strokeWeight
-              });
+                color: ColorUtils.figmaColorToHex((stroke as SolidPaint).color)
+              };
+
+              if (opacity !== 1) {
+                strokeData.opacity = opacity;
+              }
+
+              if (strokeWeightValue !== 1) {
+                strokeData.strokeWeight = rounded(strokeWeightValue);
+              }
+
+              colors.push(strokeData);
             }
           }
         }
+      }
+
+      if (hasColor) {
+        element.hasColor = true;
+        element.colors = colors;
       }
     }
 
@@ -375,11 +414,23 @@ export class DesignModificationHandler {
     // Analisa filhos recursivamente, passando 'types' adiante
     if ('children' in node) {
       for (const child of node.children) {
-        element.children.push(this.analyzeNodeForModification(child, types));
+        const analyzedChild = this.analyzeNodeForModification(child, types);
+        if (analyzedChild) {
+          childElements.push(analyzedChild);
+        }
       }
     }
 
-    return element;
+    if (childElements.length > 0) {
+      element.children = childElements;
+    }
+
+    const hasOwnData = Object.keys(element).some((key) => !['id', 'name', 'type', 'children'].includes(key));
+    if (isRoot || hasOwnData || childElements.length > 0) {
+      return element;
+    }
+
+    return null;
   }
 
   // Apply design modifications

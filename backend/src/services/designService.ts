@@ -222,10 +222,11 @@ RULES FOR TYPES FILTER:
 - If types includes "style", include style modifications
 - Ignore (do not include) any modifications that don't match the requested types`;
 
+  const designDataString = JSON.stringify(designAnalysis);
   const userMessage = `User prompt: ${prompt}
 
 Design data:
-${JSON.stringify(designAnalysis, null, 2)}`;
+${designDataString}`;
 
   const messages: ChatCompletionMessageParam[] = [
     {

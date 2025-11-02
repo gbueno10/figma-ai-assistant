@@ -7,6 +7,7 @@ import { AIDesignAssistant } from './aiDesignAssistant';
 import { DesignModificationHandler } from './handlers/designModificationHandler';
 import { DEFAULT_BACKEND_BASE_URL } from './config';
 import { setBackendBaseUrl } from './services/backendClient';
+import { NamingUtils } from './utils/namingConvention';
 
 const API_KEY_STORAGE_KEY = 'figma-ai-assistant-api-key';
 const BACKEND_URL_STORAGE_KEY = 'figma-ai-assistant-backend-url';
@@ -674,9 +675,37 @@ async function handleFrameReflow(newHeight: number) {
   }
 
   const newFrame = baseFrame.clone();
-  newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)})`;
   newFrame.x = baseFrame.x + baseFrame.width + 100;
   newFrame.y = baseFrame.y;
+
+  // Aplicar nomenclatura Dogo
+  try {
+    const metadataResult = NamingUtils.readFrameMetadata(baseFrame);
+    const existingData = metadataResult.data;
+    
+    // Gerar novo ticket e variant (é um resize, consideramos "novo conceito")
+    const newTicketNumber = NamingUtils.generateNewTicketNumber();
+    const newVariant = NamingUtils.generateRandomVariant();
+    
+    // Atualizar dimensão no formato correto
+    const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
+    
+    const newData = {
+      ...existingData,
+      ticketNumber: existingData.ticketNumber || newTicketNumber, // Apenas o número (ex: "6564")
+      variant: newVariant,
+      dimension: newDimension
+    };
+    
+    const newName = NamingUtils.generateCreativeName(newFrame, newData);
+    newFrame.name = newName;
+    NamingUtils.saveFrameMetadata(newFrame, newData);
+    
+    console.log(`🏷️ Frame resize renomeado: ${newName}`);
+  } catch (namingError) {
+    console.log(`⚠️ Falha ao aplicar nomenclatura Dogo no resize: ${namingError}`);
+    newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)})`;
+  }
 
   const frameWithResize = newFrame as FrameNode;
   if (typeof frameWithResize.resizeWithoutConstraints === 'function') {
@@ -751,8 +780,8 @@ async function handleFrameReflow(newHeight: number) {
   figma.currentPage.selection = [newFrame];
   figma.viewport.scrollAndZoomIntoView([newFrame]);
 
-  const successMsg = `✅ Frame redimensionado para ${Math.round(oldWidth)}x${Math.round(newHeight)}!`;
-  figma.notify(successMsg);
+  const successMsg = `✅ Novo frame criado: ${Math.round(oldWidth)}x${Math.round(newHeight)} [Reflow]`;
+  figma.notify(successMsg, { timeout: 3000 });
   figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
 }
 
@@ -800,9 +829,37 @@ async function handleFrameStretch(newHeight: number) {
 
   const stretchRatio = newHeight / oldHeight;
   const newFrame = baseFrame.clone();
-  newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)}) [Stretch]`;
   newFrame.x = baseFrame.x + baseFrame.width + 100;
   newFrame.y = baseFrame.y;
+
+  // Aplicar nomenclatura Dogo
+  try {
+    const metadataResult = NamingUtils.readFrameMetadata(baseFrame);
+    const existingData = metadataResult.data;
+    
+    // Gerar novo ticket e variant (é um resize, consideramos "novo conceito")
+    const newTicketNumber = NamingUtils.generateNewTicketNumber();
+    const newVariant = NamingUtils.generateRandomVariant();
+    
+    // Atualizar dimensão no formato correto
+    const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
+    
+    const newData = {
+      ...existingData,
+      ticketNumber: existingData.ticketNumber || newTicketNumber, // Apenas o número (ex: "6564")
+      variant: newVariant,
+      dimension: newDimension
+    };
+    
+    const newName = NamingUtils.generateCreativeName(newFrame, newData);
+    newFrame.name = newName;
+    NamingUtils.saveFrameMetadata(newFrame, newData);
+    
+    console.log(`🏷️ Frame resize renomeado: ${newName}`);
+  } catch (namingError) {
+    console.log(`⚠️ Falha ao aplicar nomenclatura Dogo no resize: ${namingError}`);
+    newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)}) [Stretch]`;
+  }
 
   const frameWithResize = newFrame as FrameNode;
   if (typeof frameWithResize.resizeWithoutConstraints === 'function') {
@@ -837,7 +894,7 @@ async function handleFrameStretch(newHeight: number) {
   figma.currentPage.selection = [newFrame];
   figma.viewport.scrollAndZoomIntoView([newFrame]);
 
-  const successMsg = `✅ Frame esticado para ${Math.round(oldWidth)}x${Math.round(newHeight)}!`;
-  figma.notify(successMsg);
+  const successMsg = `✅ Novo frame criado: ${Math.round(oldWidth)}x${Math.round(newHeight)} [Stretch]`;
+  figma.notify(successMsg, { timeout: 3000 });
   figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
 }

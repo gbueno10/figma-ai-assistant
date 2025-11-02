@@ -3,6 +3,7 @@
 import { DesignAnalysis } from '../types';
 import { ColorUtils } from '../utils/colorUtils';
 import { AIService } from '../services/aiService';
+import { NamingUtils } from '../utils/namingConvention';
 
 export class DesignModificationHandler {
   
@@ -77,7 +78,7 @@ export class DesignModificationHandler {
 
       // Step 4: Duplicate frames before modification
       console.log(`⏱️ [${Date.now() - startTime}ms] Step 4: Duplicating frames...`);
-      const { duplicatedNodes, idMapping } = await this.duplicateSelectedFrames(selectedNodes);
+      const { duplicatedNodes, idMapping } = await this.duplicateSelectedFrames(selectedNodes, types);
       
       // Progress update
       figma.ui.postMessage({
@@ -180,8 +181,9 @@ export class DesignModificationHandler {
   }
 
   // Duplicate selected frames before modification
-  static async duplicateSelectedFrames(nodes: readonly SceneNode[]): Promise<{duplicatedNodes: SceneNode[], idMapping: Map<string, string>}> {
+  static async duplicateSelectedFrames(nodes: readonly SceneNode[], types: string[]): Promise<{duplicatedNodes: SceneNode[], idMapping: Map<string, string>}> {
     console.log(`📋 Duplicating ${nodes.length} selected element(s)...`);
+    console.log(`🎯 Modification types for naming: ${types.join(', ')}`);
     const duplicatedNodes: SceneNode[] = [];
     const idMapping = new Map<string, string>();
     
@@ -204,8 +206,65 @@ export class DesignModificationHandler {
           duplicatedNode.y = node.y + 50;
         }
         
-        // Update the name to indicate it's modified
-        duplicatedNode.name = `${node.name} (AI Modified)`;
+        // Apply Dogo naming convention if this is a frame
+        if (node.type === 'FRAME') {
+          try {
+            // 1. Ler metadados do frame ORIGINAL
+            const originalFrame = node as FrameNode;
+            const newFrame = duplicatedNode as FrameNode;
+            const metadataResult = NamingUtils.readFrameMetadata(originalFrame);
+            const existingData = metadataResult.data;
+
+            // 2. Determinar a regra de nomenclatura com base nos 'types'
+            // 'types' é o array que recebemos, ex: ['color'] ou ['color', 'text']
+            const isColorOnlyChange = types.length === 1 && types[0] === 'color';
+            
+            let newTicketNumber: string;
+            let newVariant: string;
+
+            if (isColorOnlyChange) {
+              // --- REGRA 1 (Iteração/Cor) ---
+              // Manter o ticket number original
+              newTicketNumber = existingData.ticketNumber || '';
+              // Gerar nova variante aleatória de IA
+              newVariant = NamingUtils.generateRandomVariant();
+              console.log(`🏷️ Regra 1 (Iteração): Mesmo Ticket (${newTicketNumber || 'N/A'}), Novo Variant (${newVariant})`);
+
+            } else {
+              // --- REGRA 2 (Novo Conceito / Outras alterações) ---
+              // Gerar novo ticket number aleatório
+              newTicketNumber = NamingUtils.generateNewTicketNumber();
+              // Gerar nova variante aleatória de IA
+              newVariant = NamingUtils.generateRandomVariant();
+              console.log(`🏷️ Regra 2 (Novo Conceito): Novo Ticket (${newTicketNumber}), Novo Variant (${newVariant})`);
+            }
+
+            // 3. Construir os novos metadados
+            // (Mantém os outros dados do original, como 'petTactic', 'language', etc.)
+            const newData = { 
+              ...existingData, 
+              ticketNumber: newTicketNumber,
+              variant: newVariant 
+            };
+
+            // 4. Gerar e aplicar o novo nome ao NOVO frame
+            const newName = NamingUtils.generateCreativeName(newFrame, newData);
+            newFrame.name = newName;
+
+            // 5. Salvar os novos metadados no NOVO frame
+            NamingUtils.saveFrameMetadata(newFrame, newData);
+            
+            console.log(`🏷️ Frame AI versionado e renomeado para: ${newName}`);
+
+          } catch (namingError) {
+            // Plano de Contingência (Fallback)
+            console.log(`⚠️ Falha ao aplicar convenção Dogo: ${namingError}. Usando nome padrão.`);
+            duplicatedNode.name = `${node.name} (AI Modified)`;
+          }
+        } else {
+          // Para elementos que não são frames, usar o nome padrão
+          duplicatedNode.name = `${node.name} (AI Modified)`;
+        }
         
         // Add to the same parent
         if (node.parent && 'appendChild' in node.parent) {

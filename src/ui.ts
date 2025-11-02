@@ -800,15 +800,19 @@ function initResize(): void {
 
   resizeTo1350Btn.addEventListener('click', () => {
     console.log('📏 Stretching frame to 1080x1350...');
-    resultResize.innerHTML = '';
-    resultResize.className = '';
+    resultResize.innerHTML = '⏳ Duplicando e redimensionando frame...';
+    resultResize.className = 'result';
+    resizeTo1350Btn.disabled = true;
+    resizeTo1920Btn.disabled = true;
     postPluginMessage({ type: 'resize-frame-stretch', newHeight: 1350 });
   });
 
   resizeTo1920Btn.addEventListener('click', () => {
     console.log('📏 Reflowing frame to 1080x1920...');
-    resultResize.innerHTML = '';
-    resultResize.className = '';
+    resultResize.innerHTML = '⏳ Duplicando e redimensionando frame...';
+    resultResize.className = 'result';
+    resizeTo1350Btn.disabled = true;
+    resizeTo1920Btn.disabled = true;
     postPluginMessage({ type: 'resize-frame-reflow', newHeight: 1920 });
   });
 }
@@ -1070,6 +1074,9 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
     case 'resize-complete': {
       const message = typeof msg.message === 'string' ? msg.message : 'Frame resized successfully!';
       showResult(message, 'success', 'resultResize');
+      // Re-enable buttons
+      getElement<HTMLButtonElement>('resizeTo1350Btn').disabled = false;
+      getElement<HTMLButtonElement>('resizeTo1920Btn').disabled = false;
       console.log('✅ Resize completed');
       break;
     }
@@ -1094,6 +1101,11 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       getElement<HTMLButtonElement>('generateBtn').disabled = false;
       getElement<HTMLDivElement>('loadingEditImages').style.display = 'none';
       getElement<HTMLButtonElement>('editImagesBtn').disabled = false;
+      // Re-enable resize buttons on error
+      if (msg.context === 'resize') {
+        getElement<HTMLButtonElement>('resizeTo1350Btn').disabled = false;
+        getElement<HTMLButtonElement>('resizeTo1920Btn').disabled = false;
+      }
       if (msg.context === 'image-edit') {
         clearImageEditPreview();
       }

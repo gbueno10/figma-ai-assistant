@@ -1,0 +1,52 @@
+# Docker Compose para Usuários Finais
+# Arquivo simplificado para rodar o Figma AI Assistant Backend
+
+version: '3.8'
+
+services:
+  backend:
+    # Imagem publicada no Docker Hub
+    image: gbueno10/figma-ai-backend:latest
+    container_name: figma-ai-backend
+    
+    # Porta exposta
+    ports:
+      - "3000:3000"
+    
+    # Variáveis de ambiente
+    # IMPORTANTE: Configure sua OPENAI_API_KEY no arquivo .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=3000
+      - NODE_ENV=production
+      # Opcional: configure CORS se necessário
+      # - CORS_ORIGIN=https://seu-dominio.com
+    
+    # Reiniciar automaticamente se falhar
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Arquivo .env necessário:
+# Crie um arquivo .env na mesma pasta com:
+#
+# OPENAI_API_KEY=sk-sua-chave-aqui
+#
+# Comandos úteis:
+# - Iniciar: docker-compose -f docker-compose.simple.yml up -d
+# - Parar: docker-compose -f docker-compose.simple.yml down
+# - Logs: docker-compose -f docker-compose.simple.yml logs -f
+# - Status: docker-compose -f docker-compose.simple.yml ps

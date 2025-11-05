@@ -6,3 +6,17 @@ dist/
 # Webpack cache para builds mais rápidas
 .webpack_cache/
 node_modules/.cache/
+
+# Environment variables (NUNCA commitar chaves reais!)
+backend/.env
+backend/.env.local
+backend/.env.production
+.env
+.env.local
+.env.production
+
+# Release artifacts (não precisa no git, só no GitHub Release)
+releases/*/figma-ai-assistant-plugin-*.zip
+
+# Arquivos temporários de documentação (usar só localmente)
+CRIAR-DOCKERHUB-REPO.md

@@ -6,6 +6,17 @@ import { AIService } from '../services/aiService';
 import { NamingUtils } from '../utils/namingConvention';
 import { findOptimalFontSize } from '../utils/textUtils';
 
+/**
+ * Retorna a data atual no formato MmmDD (ex: Nov10)
+ */
+function getCurrentDateSuffix(): string {
+  const now = new Date();
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const month = months[now.getMonth()];
+  const day = now.getDate();
+  return `${month}${day}`; // ex: Nov10
+}
+
 export class DesignModificationHandler {
   
   // Handler principal para modificação de design
@@ -248,14 +259,58 @@ export class DesignModificationHandler {
               variant: newVariant 
             };
 
-            // 4. Gerar e aplicar o novo nome ao NOVO frame
-            const newName = NamingUtils.generateCreativeName(newFrame, newData);
+            // 4. --- INÍCIO DA NOVA LÓGICA DE NOMEAÇÃO ---
+            
+            // 4.1. Obter o nome original como base
+            const originalName = (node as FrameNode).name;
+            
+            // 4.2. Remover qualquer sufixo de data antiga (ex: _Sep25)
+            const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
+            const nameBase = originalName.replace(dateRegex, '');
+            
+            // 4.3. Regex para encontrar as partes principais:
+            // Grupo 1: (Dogo_)? - Prefixo Dogo opcional
+            // Grupo 2: (Ticket\d+|\d+) - Ticket (ex: Ticket1234 ou 1047)
+            // Grupo 3: ([^_]+) - Variante (ex: V1 ou v2)
+            const nameRegex = /^(Dogo_)?(Ticket\d+|\d+)_([^_]+)/;
+            const match = nameBase.match(nameRegex);
+            
+            let newName = '';
+            
+            if (match) {
+              // --- CASO A: Formato Dogo/Ticket encontrado ---
+              // O 'match[0]' contém a parte inteira (ex: "Dogo_1047_v2" ou "Ticket1234_V1")
+              // Pegamos o resto do nome *após* essa parte
+              const restOfName = nameBase.substring(match[0].length);
+              
+              // Construímos o novo nome:
+              // 1. Prefixo "Dogo_" (sempre)
+              // 2. Novo ticket (da lógica de regras)
+              // 3. Nova variante (da lógica de regras)
+              // 4. O resto do nome original (preservado)
+              // 5. Novo sufixo de data
+              newName = `Dogo_${newData.ticketNumber}_${newData.variant}${restOfName}_${getCurrentDateSuffix()}`;
+              
+            } else {
+              // --- CASO B: Fallback (ex: "My Custom Frame") ---
+              // O nome não segue o padrão. Construímos um novo nome do zero
+              // usando os metadados que temos (pode ser incompleto, mas é o melhor que podemos fazer)
+              
+              const dim = newData.dimension ? `_${newData.dimension}` : '';
+              const lang = newData.language ? `_${newData.language}` : '';
+              const tactic = newData.petTactic ? `_${newData.petTactic}` : '';
+              
+              newName = `Dogo_${newData.ticketNumber}_${newData.variant}${dim}${lang}${tactic}_${getCurrentDateSuffix()}`;
+            }
+
+            // 4.4. Aplicar o novo nome
             newFrame.name = newName;
 
-            // 5. Salvar os novos metadados no NOVO frame
+            // 5. Salvar os novos metadados no NOVO frame (isso está correto)
             NamingUtils.saveFrameMetadata(newFrame, newData);
             
             console.log(`🏷️ Frame AI versionado e renomeado para: ${newName}`);
+            // --- FIM DA NOVA LÓGICA DE NOMEAÇÃO ---
 
           } catch (namingError) {
             // Plano de Contingência (Fallback)

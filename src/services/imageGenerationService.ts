@@ -207,7 +207,8 @@ export class ImageGenerationService {
     imageBytes: Uint8Array,
     x = 0,
     y = 0,
-    name = 'AI Generated Image'
+    name = 'AI Generated Image',
+    targetFrame: FrameNode | null = null
   ): Promise<void> {
     console.log(`🎨 [FIGMA-CREATE] Creating image in Figma at position (${x}, ${y})`);
 
@@ -227,7 +228,11 @@ export class ImageGenerationService {
         },
       ];
 
-      if (figma.currentPage.selection.length > 0) {
+      // Se foi especificado um targetFrame, adicionar dentro dele
+      if (targetFrame) {
+        targetFrame.appendChild(rect);
+        console.log(`✅ [FIGMA-CREATE] Image added inside frame: ${targetFrame.name}`);
+      } else if (figma.currentPage.selection.length > 0) {
         const parent = figma.currentPage.selection[0].parent;
         if (parent && 'appendChild' in parent) {
           parent.appendChild(rect);

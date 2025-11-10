@@ -1,6 +1,18 @@
 // Handler para geração de imagens com IA
 
 import { ImageGenerationService } from '../services/imageGenerationService';
+import { NamingUtils } from '../utils/namingConvention';
+
+/**
+ * Retorna a data atual no formato MmmDD (ex: Nov10)
+ */
+function getCurrentDateSuffix(): string {
+  const now = new Date();
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const month = months[now.getMonth()];
+  const day = now.getDate();
+  return `${month}${day}`; // ex: Nov10
+}
 
 export class ImageGenerationHandler {
   
@@ -31,24 +43,126 @@ export class ImageGenerationHandler {
       // Progress update
       figma.ui.postMessage({
         type: 'image-progress',
-        message: 'Gerando imagem com IA...',
+        message: 'Preparando geração de imagem...',
         step: 1,
         totalSteps: 3
       });
 
-      // Step 1: Generate image with AI (método híbrido)
-      console.log(`⏱️ [${Date.now() - startTime}ms] Step 1: Generating image with hybrid approach...`);
+      // Step 1: Duplicate frame if selected
+      console.log(`⏱️ [${Date.now() - startTime}ms] Step 1: Preparing frame for new image...`);
+      
+      let targetFrame: FrameNode | null = null;
+      let x = 0;
+      let y = 0;
+      
+      if (figma.currentPage.selection.length > 0) {
+        const selection = figma.currentPage.selection[0];
+        
+        // Se selecionou um frame, DUPLICAR PRIMEIRO
+        if (selection.type === 'FRAME') {
+          const originalFrame = selection as FrameNode;
+          
+          // Progress update
+          figma.ui.postMessage({
+            type: 'image-progress',
+            message: 'Duplicando frame para nova versão...',
+            step: 1,
+            totalSteps: 4
+          });
+          
+          console.log(`🎯 Duplicating frame: ${originalFrame.name}`);
+          
+          // Duplicar o frame
+          targetFrame = originalFrame.clone() as FrameNode;
+          
+          // Posicionar ao lado do original
+          targetFrame.x = originalFrame.x + originalFrame.width + 50;
+          targetFrame.y = originalFrame.y;
+          
+          // Adicionar ao mesmo parent
+          if (originalFrame.parent && 'appendChild' in originalFrame.parent) {
+            originalFrame.parent.appendChild(targetFrame);
+          } else {
+            figma.currentPage.appendChild(targetFrame);
+          }
+          
+          // Aplicar convenção de nomes Dogo com novo ticket
+          try {
+            const metadataResult = NamingUtils.readFrameMetadata(originalFrame);
+            const existingData = metadataResult.data;
+            
+            // Gerar novo ticket number e variant para nova imagem
+            const newTicketNumber = NamingUtils.generateNewTicketNumber();
+            const newVariant = NamingUtils.generateRandomVariant();
+            
+            const newData = {
+              ...existingData,
+              ticketNumber: newTicketNumber,
+              variant: newVariant
+            };
+            
+            // Aplicar lógica de nomeação
+            const originalName = originalFrame.name;
+            const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
+            const nameBase = originalName.replace(dateRegex, '');
+            const nameRegex = /^(Dogo_)?(Ticket\d+|\d+)_([^_]+)/;
+            const match = nameBase.match(nameRegex);
+            
+            let newName = '';
+            
+            if (match) {
+              const restOfName = nameBase.substring(match[0].length);
+              newName = `Dogo_${newData.ticketNumber}_${newData.variant}${restOfName}_${getCurrentDateSuffix()}`;
+            } else {
+              const dim = newData.dimension ? `_${newData.dimension}` : '';
+              const lang = newData.language ? `_${newData.language}` : '';
+              const tactic = newData.petTactic ? `_${newData.petTactic}` : '';
+              newName = `Dogo_${newData.ticketNumber}_${newData.variant}${dim}${lang}${tactic}_${getCurrentDateSuffix()}`;
+            }
+            
+            targetFrame.name = newName;
+            NamingUtils.saveFrameMetadata(targetFrame, newData);
+            
+            console.log(`🏷️ Frame duplicated and renamed: ${newName}`);
+          } catch (namingError) {
+            console.log(`⚠️ Failed to apply naming convention:`, namingError);
+            targetFrame.name = `${originalFrame.name} (AI Image)`;
+          }
+          
+          // Posicionar imagem no centro do frame duplicado
+          x = (targetFrame.width - 512) / 2;
+          y = (targetFrame.height - 512) / 2;
+          
+          // Selecionar o frame duplicado
+          figma.currentPage.selection = [targetFrame];
+          
+          console.log(`✅ Frame duplicated. Image will be created at (${x}, ${y})`);
+        } else {
+          // Se não é frame, posicionar ao lado
+          x = selection.x + selection.width + 50;
+          y = selection.y;
+          console.log(`📍 Creating image next to selection: ${selection.name}`);
+        }
+      } else {
+        // Sem seleção, usar centro da viewport
+        x = figma.viewport.center.x - 256;
+        y = figma.viewport.center.y - 256;
+        console.log(`📍 Creating image at viewport center`);
+      }
+
+      // Step 2: Generate image with AI
+      console.log(`⏱️ [${Date.now() - startTime}ms] Step 2: Generating image with AI...`);
       
       // Progress update
       figma.ui.postMessage({
         type: 'image-progress',
         message: 'Gerando imagem (método base64 otimizado)...',
-        step: 1,
-        totalSteps: 2
+        step: 2,
+        totalSteps: 4
       });
 
-      // Step 2: Get image bytes using base64-only method (evita CORS)
-      console.log(`⏱️ [${Date.now() - startTime}ms] Step 2: Getting image bytes (base64 only)...`);
+      // Get image bytes using base64-only method (evita CORS)
+      console.log(`⏱️ [${Date.now() - startTime}ms] Getting image bytes...`);
       const imageBytes = await ImageGenerationService.generateImageBase64Only(msg.prompt, msg.apiKey, msg.size);
       
       // Para compatibilidade, geramos a URL para exibição usando conversão compatível
@@ -79,29 +193,20 @@ export class ImageGenerationHandler {
       // Progress update
       figma.ui.postMessage({
         type: 'image-progress',
-        message: 'Criando imagem no Figma...',
-        step: 2,
-        totalSteps: 2
+        message: 'Criando imagem...',
+        step: 3,
+        totalSteps: 3
       });
-
+      
       // Step 3: Create image in Figma
       console.log(`⏱️ [${Date.now() - startTime}ms] Step 3: Creating image in Figma...`);
-      
-      // Posição baseada na viewport atual ou seleção
-      let x = figma.viewport.center.x - 256; // Centralizar imagem (assumindo 512x512)
-      let y = figma.viewport.center.y - 256;
-      
-      if (figma.currentPage.selection.length > 0) {
-        const selection = figma.currentPage.selection[0];
-        x = selection.x + selection.width + 50; // Ao lado da seleção
-        y = selection.y;
-      }
       
       await ImageGenerationService.createImageInFigma(
         imageBytes, 
         x, 
         y, 
-        `AI: ${msg.prompt.substring(0, 30)}...`
+        `AI: ${msg.prompt.substring(0, 30)}...`,
+        targetFrame
       );
 
       // Success notification
@@ -170,6 +275,134 @@ export class ImageGenerationHandler {
         return;
       }
 
+      // Verificar se está dentro de um frame e duplicá-lo
+      let parentFrame = targetNode.parent;
+      let duplicatedFrame: FrameNode | null = null;
+      let nodeToReplace: SceneNode = targetNode;
+      
+      // Encontrar o frame pai mais próximo
+      while (parentFrame && parentFrame.type !== 'PAGE') {
+        if (parentFrame.type === 'FRAME') {
+          duplicatedFrame = parentFrame as FrameNode;
+          break;
+        }
+        parentFrame = parentFrame.parent;
+      }
+      
+      // Se encontrou um frame pai, duplicar e renomear
+      if (duplicatedFrame) {
+        console.log(`🎯 Found parent frame: ${duplicatedFrame.name}`);
+        
+        // Progress update
+        figma.ui.postMessage({
+          type: 'image-progress',
+          message: 'Duplicando frame...',
+          step: 1,
+          totalSteps: 4
+        });
+        
+        // Duplicar o frame
+        const originalFrame = duplicatedFrame;
+        duplicatedFrame = originalFrame.clone() as FrameNode;
+        
+        // Posicionar ao lado do original
+        duplicatedFrame.x = originalFrame.x + originalFrame.width + 50;
+        duplicatedFrame.y = originalFrame.y;
+        
+        // Adicionar ao mesmo parent
+        if (originalFrame.parent && 'appendChild' in originalFrame.parent) {
+          originalFrame.parent.appendChild(duplicatedFrame);
+        } else {
+          figma.currentPage.appendChild(duplicatedFrame);
+        }
+        
+        // Aplicar convenção de nomes Dogo
+        try {
+          const metadataResult = NamingUtils.readFrameMetadata(originalFrame);
+          const existingData = metadataResult.data;
+          
+          // Gerar novo ticket number e variant para substituição de imagem
+          const newTicketNumber = NamingUtils.generateNewTicketNumber();
+          const newVariant = NamingUtils.generateRandomVariant();
+          
+          const newData = {
+            ...existingData,
+            ticketNumber: newTicketNumber,
+            variant: newVariant
+          };
+          
+          // Aplicar lógica de nomeação (mesma do designModificationHandler)
+          const originalName = originalFrame.name;
+          const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
+          const nameBase = originalName.replace(dateRegex, '');
+          const nameRegex = /^(Dogo_)?(Ticket\d+|\d+)_([^_]+)/;
+          const match = nameBase.match(nameRegex);
+          
+          let newName = '';
+          
+          if (match) {
+            const restOfName = nameBase.substring(match[0].length);
+            newName = `Dogo_${newData.ticketNumber}_${newData.variant}${restOfName}_${getCurrentDateSuffix()}`;
+          } else {
+            const dim = newData.dimension ? `_${newData.dimension}` : '';
+            const lang = newData.language ? `_${newData.language}` : '';
+            const tactic = newData.petTactic ? `_${newData.petTactic}` : '';
+            newName = `Dogo_${newData.ticketNumber}_${newData.variant}${dim}${lang}${tactic}_${getCurrentDateSuffix()}`;
+          }
+          
+          duplicatedFrame.name = newName;
+          NamingUtils.saveFrameMetadata(duplicatedFrame, newData);
+          
+          console.log(`🏷️ Frame duplicated and renamed: ${newName}`);
+        } catch (namingError) {
+          console.log(`⚠️ Failed to apply naming convention:`, namingError);
+          duplicatedFrame.name = `${originalFrame.name} (AI Image)`;
+        }
+        
+        // Encontrar o nó correspondente no frame duplicado
+        const findCorrespondingNode = (original: SceneNode, duplicated: FrameNode): SceneNode | null => {
+          // Se o targetNode é o próprio frame
+          if (original.id === targetNode.id) {
+            return duplicated;
+          }
+          
+          // Buscar recursivamente nos filhos
+          const searchInChildren = (parent: BaseNode & ChildrenMixin): SceneNode | null => {
+            for (let i = 0; i < parent.children.length; i++) {
+              if (parent.children[i].name === targetNode.name) {
+                // Verificar se é o nó correto comparando a posição relativa
+                const originalPos = { x: targetNode.x, y: targetNode.y };
+                const candidatePos = { x: parent.children[i].x, y: parent.children[i].y };
+                
+                if (Math.abs(originalPos.x - candidatePos.x) < 1 && 
+                    Math.abs(originalPos.y - candidatePos.y) < 1) {
+                  return parent.children[i] as SceneNode;
+                }
+              }
+              
+              if ('children' in parent.children[i]) {
+                const found = searchInChildren(parent.children[i] as BaseNode & ChildrenMixin);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+          
+          return searchInChildren(duplicated);
+        };
+        
+        const correspondingNode = findCorrespondingNode(targetNode, duplicatedFrame);
+        if (correspondingNode) {
+          nodeToReplace = correspondingNode;
+          console.log(`✅ Found corresponding node in duplicated frame: ${nodeToReplace.name}`);
+        } else {
+          console.log(`⚠️ Could not find corresponding node, using original`);
+        }
+        
+        // Selecionar o frame duplicado
+        figma.currentPage.selection = [duplicatedFrame];
+      }
+
       // Validar dados recebidos
       if (!msg.prompt) {
         figma.ui.postMessage({
@@ -183,30 +416,33 @@ export class ImageGenerationHandler {
         console.log('⚠️ Nenhuma chave da API fornecida para substituição de imagem; usando backend.');
       }
 
-      console.log(`🎯 Target: ${targetNode.name} (${targetNode.type})`);
+      console.log(`🎯 Target: ${nodeToReplace.name} (${nodeToReplace.type})`);
       console.log(`📝 Prompt: "${msg.prompt}"`);
 
       // Progress update
+      const totalSteps = duplicatedFrame ? 4 : 3;
+      const currentStep = duplicatedFrame ? 2 : 1;
+      
       figma.ui.postMessage({
         type: 'image-progress',
         message: 'Gerando nova imagem...',
-        step: 1,
-        totalSteps: 3
+        step: currentStep,
+        totalSteps: totalSteps
       });
 
       // Step 1: Generate image with AI (método híbrido)
-      console.log(`⏱️ [${Date.now() - startTime}ms] Step 1: Generating replacement image with hybrid approach...`);
+      console.log(`⏱️ [${Date.now() - startTime}ms] Step ${currentStep}: Generating replacement image with hybrid approach...`);
       
       // Progress update
       figma.ui.postMessage({
         type: 'image-progress',
         message: 'Gerando nova imagem (método base64 otimizado)...',
-        step: 1,
-        totalSteps: 2
+        step: currentStep,
+        totalSteps: totalSteps
       });
 
       // Step 2: Get image bytes using base64-only method (evita CORS)
-      console.log(`⏱️ [${Date.now() - startTime}ms] Step 2: Getting image bytes (base64 only)...`);
+      console.log(`⏱️ [${Date.now() - startTime}ms] Step ${currentStep + 1}: Getting image bytes (base64 only)...`);
       const imageBytes = await ImageGenerationService.generateImageBase64Only(msg.prompt, msg.apiKey, msg.size);
       
       // Para compatibilidade, geramos a URL para exibição usando conversão compatível
@@ -238,13 +474,13 @@ export class ImageGenerationHandler {
       figma.ui.postMessage({
         type: 'image-progress',
         message: 'Substituindo imagem...',
-        step: 2,
-        totalSteps: 2
+        step: totalSteps,
+        totalSteps: totalSteps
       });
 
       // Step 3: Replace image
-      console.log(`⏱️ [${Date.now() - startTime}ms] Step 3: Replacing image...`);
-      await ImageGenerationService.replaceImageInFigma(targetNode, imageBytes);
+      console.log(`⏱️ [${Date.now() - startTime}ms] Step ${totalSteps}: Replacing image...`);
+      await ImageGenerationService.replaceImageInFigma(nodeToReplace, imageBytes);
 
       // Success notification
       figma.ui.postMessage({

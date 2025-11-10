@@ -11,8 +11,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      # OPENAI_API_KEY é enviada pelo plugin Figma em cada requisição
-      # Definir aqui é opcional (fallback para desenvolvimento/testes)
+      # Allow overriding via environment variables when needed
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - PORT=3000
       - CORS_ORIGIN=${CORS_ORIGIN:-}

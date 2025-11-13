@@ -250,7 +250,7 @@ export class ImageGenerationService {
     } catch (error) {
       console.log(`❌ [FIGMA-CREATE] Creation error:`, error);
       throw new Error(
-        `Falha ao criar imagem no Figma: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+        `Failed to create image in Figma: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
@@ -260,7 +260,7 @@ export class ImageGenerationService {
 
     try {
       if (!('fills' in targetNode)) {
-        throw new Error('O elemento selecionado não suporta imagens');
+        throw new Error('The selected element does not support images');
       }
 
       const image = figma.createImage(imageBytes);

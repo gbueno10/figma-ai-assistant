@@ -33,7 +33,7 @@ export class DesignModificationHandler {
       if (selectedNodes.length === 0) {
         figma.ui.postMessage({
           type: 'error',
-          message: 'Por favor, selecione pelo menos um elemento para modificar.'
+          message: 'Please select at least one element to modify.'
         });
         return;
       }
@@ -43,7 +43,7 @@ export class DesignModificationHandler {
       // Progress update
       figma.ui.postMessage({
         type: 'modify-progress',
-        message: `Analisando ${selectedNodes.length} elemento(s) selecionado(s)...`,
+        message: `Analyzing ${selectedNodes.length} selected element(s)...`,
         step: 1,
         totalSteps: 4
       });
@@ -63,7 +63,7 @@ export class DesignModificationHandler {
       // Progress update
       figma.ui.postMessage({
         type: 'modify-progress',
-        message: `Enviando dados para IA para análise...`,
+        message: `Sending data to AI for analysis...`,
         step: 2,
         totalSteps: 4
       });
@@ -83,7 +83,7 @@ export class DesignModificationHandler {
       // Progress update
       figma.ui.postMessage({
         type: 'modify-progress',
-        message: `Aplicando modificações sugeridas pela IA...`,
+        message: `Applying AI-suggested modifications...`,
         step: 3,
         totalSteps: 4
       });
@@ -95,7 +95,7 @@ export class DesignModificationHandler {
       // Progress update
       figma.ui.postMessage({
         type: 'modify-progress',
-        message: `Atualizando referências para elementos duplicados...`,
+        message: `Updating references for duplicated elements...`,
         step: 4,
         totalSteps: 6
       });
@@ -107,7 +107,7 @@ export class DesignModificationHandler {
       // Progress update
       figma.ui.postMessage({
         type: 'modify-progress',
-        message: `Aplicando modificações nos elementos duplicados...`,
+        message: `Applying modifications to duplicated elements...`,
         step: 5,
         totalSteps: 6
       });
@@ -119,7 +119,7 @@ export class DesignModificationHandler {
       // Progress update
       figma.ui.postMessage({
         type: 'modify-progress',
-        message: `Finalizando processo...`,
+        message: `Finalizing process...`,
         step: 6,
         totalSteps: 6
       });

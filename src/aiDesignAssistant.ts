@@ -8,12 +8,12 @@ import { StructureAnalyzer } from './analyzers/structureAnalyzer';
 
 export class AIDesignAssistant {
   
-  // Captura screenshot do frame selecionado
+  // Capture screenshot of the selected frame
   async captureScreenshot(): Promise<string> {
     const selection = figma.currentPage.selection;
     
     if (selection.length === 0) {
-      throw new Error("Selecione um frame para capturar!");
+      throw new Error("Please select a frame to capture!");
     }
     
     const frame = selection[0] as FrameNode;
@@ -22,47 +22,47 @@ export class AIDesignAssistant {
     return await ScreenshotCapture.captureFrame(frame);
   }
   
-  // Analisa a estrutura do frame
+  // Analyze structure of the frame
   analyzeStructure(): any {
     const selection = figma.currentPage.selection;
     
     if (selection.length === 0) {
-      throw new Error("Selecione um frame para analisar!");
+      throw new Error("Please select a frame to analyze!");
     }
     
     const frame = selection[0] as FrameNode;
     return DesignAnalyzer.analyzeStructure(frame);
   }
   
-  // Conta elementos totais
+  // Count total elements
   countElements(node: SceneNode): number {
     return StructureAnalyzer.countElements(node);
   }
   
-  // Conta elementos de texto
+  // Count text elements
   countTextElements(node: SceneNode): number {
     return StructureAnalyzer.countTextElements(node);
   }
   
-  // Gera JSON estruturado e otimizado para IA
+  // Generate structured JSON optimized for AI
   generateAIOptimizedJSON(): any {
     const selection = figma.currentPage.selection;
     
     if (selection.length === 0) {
-      throw new Error("Selecione um frame para analisar!");
+      throw new Error("Please select a frame to analyze!");
     }
     
     const frame = selection[0] as FrameNode;
     return DesignAnalyzer.generateAIOptimizedJSON(frame);
   }
   
-  // Envia dados para a IA
+  // Send data to the AI
   async sendToAI(screenshot: string, structure: any, apiKey?: string): Promise<any> {
     return await AIService.sendToAI(screenshot, structure, apiKey);
   }
   
-  // Aplica uma sugestão específica
+  // Apply a specific suggestion
   async applySuggestion(suggestion: AISuggestion): Promise<void> {
-    figma.notify(`Aplicando sugestão: ${suggestion.reasoning}`, { timeout: 2000 });
+    figma.notify(`Applying suggestion: ${suggestion.reasoning}`, { timeout: 2000 });
   }
 }

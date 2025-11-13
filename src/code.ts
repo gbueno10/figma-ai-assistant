@@ -1,4 +1,3 @@
-
 /// <reference types="@figma/plugin-typings" />
 
 // Importações dos módulos
@@ -32,41 +31,41 @@ export default function runPlugin() {
 
 function initializeUiMessageHandler() {
   figma.ui.onmessage = async (msg) => {
-  console.log('Mensagem recebida da UI:', msg);
+  console.log('Message received from UI:', msg);
   
   try {
     if (msg.type === 'capture-and-analyze') {
-      console.log('Iniciando análise...');
+      console.log('Starting analysis...');
       
       // Verifica se há frame selecionado
       const selection = figma.currentPage.selection;
       if (selection.length === 0) {
-        figma.notify('❌ Selecione um frame primeiro!', { timeout: 3000 });
+        figma.notify('❌ Select a frame first!', { timeout: 3000 });
         figma.ui.postMessage({
           type: 'error',
-          message: 'Nenhum frame selecionado'
+          message: 'No frame selected'
         });
         return;
       }
       
       if (selection[0].type !== 'FRAME') {
-        figma.notify('❌ Por favor, selecione um frame (não grupo ou outro elemento)!', { timeout: 3000 });
+        figma.notify('❌ Please, select a frame (not a group or other element)!', { timeout: 3000 });
         figma.ui.postMessage({
           type: 'error', 
-          message: 'Elemento selecionado não é um frame'
+          message: 'Selected element is not a frame'
         });
         return;
       }
       
-      console.log('Frame válido encontrado:', selection[0].name);
+      console.log('Valid frame found:', selection[0].name);
       
       // Captura screenshot
       const screenshot = await aiAssistant.captureScreenshot();
-      console.log('Screenshot capturado');
+      console.log('Screenshot captured');
       
       // Gera JSON estruturado para IA (somente dados do Figma)
       const structuredData = aiAssistant.generateAIOptimizedJSON();
-      console.log('JSON estruturado gerado (apenas dados do Figma)');
+      console.log('Structured JSON generated (Figma data only)');
       
       // Retorna resultado para UI (sem contexto extra da IA)
       figma.ui.postMessage({
@@ -75,7 +74,7 @@ function initializeUiMessageHandler() {
         structuredData
       });
       
-      figma.notify('✅ Análise concluída! JSON estruturado gerado.', { timeout: 3000 });
+      figma.notify('✅ Analysis complete! Structured JSON generated.', { timeout: 3000 });
       
     } else if (msg.type === 'apply-suggestion') {
       await aiAssistant.applySuggestion(msg.suggestion);
@@ -89,7 +88,7 @@ function initializeUiMessageHandler() {
         data: structuredData
       });
       
-      figma.notify('📄 JSON estruturado gerado! Copiado para a área de transferência.', { timeout: 3000 });
+      figma.notify('📄 Structured JSON generated! Copied to clipboard.', { timeout: 3000 });
       
     } else if (msg.type === 'cancel') {
       figma.closePlugin();
@@ -246,13 +245,13 @@ async function initializeBackendUrl() {
     const storedUrl = await figma.clientStorage.getAsync(BACKEND_URL_STORAGE_KEY);
     if (storedUrl && typeof storedUrl === 'string') {
       const normalized = setBackendBaseUrl(storedUrl);
-      console.log(`🔧 Backend URL carregada do storage: ${normalized}`);
+      console.log(`🔧 Backend URL loaded from storage: ${normalized}`);
     } else {
       setBackendBaseUrl(DEFAULT_BACKEND_BASE_URL);
-      console.log(`ℹ️ Usando backend URL padrão: ${DEFAULT_BACKEND_BASE_URL}`);
+      console.log(`ℹ️ Using default backend URL: ${DEFAULT_BACKEND_BASE_URL}`);
     }
   } catch (error) {
-    console.log('⚠️ Falha ao carregar backend URL do storage:', error);
+    console.log('⚠️ Failed to load backend URL from storage:', error);
     setBackendBaseUrl(DEFAULT_BACKEND_BASE_URL);
   }
 }
@@ -288,7 +287,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       
       figma.ui.postMessage({
         type: 'image-progress',
-        message: 'Duplicando frames...',
+        message: 'Duplicating frames...',
         step: 0,
         totalSteps: 2 + imageNodes.length
       });
@@ -315,7 +314,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
             figma.currentPage.appendChild(duplicatedFrame);
           }
           
-          // Aplicar convenção de nomes Dogo com novo ticket
+          // Apply Dogo naming convention
           try {
             const getCurrentDateSuffix = (): string => {
               const now = new Date();
@@ -420,7 +419,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       // Passo 1: Disparar todas as requisições para a API em paralelo
       figma.ui.postMessage({
         type: 'image-progress',
-        message: `Gerando ${nodesToRegenerate.length} imagem(ns) em paralelo...`,
+        message: `Generating ${nodesToRegenerate.length} image(s) in parallel...`,
         step: 1,
         totalSteps: 2 + nodesToRegenerate.length
       });
@@ -475,7 +474,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
           // Feedback de progresso mais detalhado para o usuário
           figma.ui.postMessage({
               type: 'image-progress',
-              message: `Aplicando imagem ${i + 1} de ${nodesToRegenerate.length}...`,
+              message: `Applying image ${i + 1} of ${nodesToRegenerate.length}...`,
               step: 2 + i,
               totalSteps: 2 + nodesToRegenerate.length
           });
@@ -492,7 +491,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
           } else {
               errorCount++;
               console.log(`❌ [GENERATE] Erro ao gerar imagem para ${node.name}:`, result.reason);
-              figma.notify(`Falha ao gerar imagem para ${node.name}`, { error: true });
+              figma.notify(`Failed to generate image for ${node.name}`, { error: true });
           }
 
           // **A MUDANÇA MAIS IMPORTANTE!**
@@ -501,8 +500,8 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       }
       
       const message = errorCount > 0 
-        ? `Regeneradas ${successCount}/${nodesToRegenerate.length} imagens (${errorCount} falhas)`
-        : `Todas as ${successCount} imagens foram regeneradas com sucesso!`;
+        ? `Regenerated ${successCount}/${nodesToRegenerate.length} images (${errorCount} failures)`
+        : `All ${successCount} images were regenerated successfully!`;
       
       figma.ui.postMessage({
         type: 'image-complete',
@@ -510,10 +509,10 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       });
       
       figma.notify(`✅ ${message}`, { timeout: 3000 });
-      console.log(`🎉 [PARALLEL] Regeneração completa: ${successCount} sucessos, ${errorCount} erros`);
+      console.log(`🎉 [PARALLEL] Regeneration complete: ${successCount} successes, ${errorCount} errors`);
       
     } else {
-      // Geração de nova imagem (a lógica existente para uma imagem está boa)
+      // New image generation (existing logic for one image is good)
       figma.ui.postMessage({
         type: 'image-progress',
         message: 'Generating new image...',
@@ -789,13 +788,13 @@ async function executePendingFrameImageEditing({ prompt, apiKey, size }: { promp
 
 async function handleFrameReflow(newHeight: number) {
   if (typeof newHeight !== 'number' || Number.isNaN(newHeight) || newHeight <= 0) {
-    throw new Error('Altura inválida fornecida para redimensionamento.');
+    throw new Error('Invalid height provided for resizing.');
   }
 
   const selection = figma.currentPage.selection;
 
   if (selection.length !== 1 || selection[0].type !== 'FRAME') {
-    throw new Error('Por favor, selecione um único frame para redimensionar.');
+    throw new Error('Please select a single frame to resize.');
   }
 
   const baseFrame = selection[0] as FrameNode;
@@ -803,11 +802,11 @@ async function handleFrameReflow(newHeight: number) {
   const oldHeight = baseFrame.height;
 
   if (Math.round(oldHeight) === Math.round(newHeight)) {
-    throw new Error('O frame já possui a altura desejada.');
+    throw new Error('The frame already has the desired height.');
   }
 
   if (newHeight < oldHeight) {
-    throw new Error('Esta função só suporta aumentar a altura do frame selecionado.');
+    throw new Error('This function only supports increasing the height of the selected frame.');
   }
 
   const newFrame = baseFrame.clone();
@@ -855,9 +854,9 @@ async function handleFrameReflow(newHeight: number) {
     
     newFrame.name = newName;
     
-    console.log(`🏷️ Frame resize renomeado: ${newName}`);
+    console.log(`🏷️ Frame resize renamed: ${newName}`);
   } catch (namingError) {
-    console.log(`⚠️ Falha ao aplicar nomenclatura Dogo no resize: ${namingError}`);
+    console.log(`⚠️ Failed to apply Dogo naming convention on resize: ${namingError}`);
     newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)})`;
   }
 
@@ -904,7 +903,7 @@ async function handleFrameReflow(newHeight: number) {
     try {
       backgroundNode.resize(widthForResize, newHeight);
     } catch (error) {
-      console.log('⚠️ Não foi possível esticar o background detectado:', error);
+      console.log('⚠️ Could not stretch the detected background:', error);
     }
   }
 
@@ -960,13 +959,13 @@ function findImageNodes(node: SceneNode): SceneNode[] {
 
 async function handleFrameStretch(newHeight: number) {
   if (typeof newHeight !== 'number' || Number.isNaN(newHeight) || newHeight <= 0) {
-    throw new Error('Altura inválida fornecida para redimensionamento.');
+    throw new Error('Invalid height provided for resizing.');
   }
 
   const selection = figma.currentPage.selection;
 
   if (selection.length !== 1 || selection[0].type !== 'FRAME') {
-    throw new Error('Por favor, selecione um único frame para redimensionar.');
+    throw new Error('Please select a single frame to resize.');
   }
 
   const baseFrame = selection[0] as FrameNode;
@@ -974,11 +973,11 @@ async function handleFrameStretch(newHeight: number) {
   const oldHeight = baseFrame.height;
 
   if (Math.round(oldHeight) === Math.round(newHeight)) {
-    throw new Error('O frame já possui a altura desejada.');
+    throw new Error('The frame already has the desired height.');
   }
 
   if (newHeight < oldHeight) {
-    throw new Error('Esta função só suporta aumentar a altura do frame selecionado.');
+    throw new Error('This function only supports increasing the height of the selected frame.');
   }
 
   const stretchRatio = newHeight / oldHeight;
@@ -1027,9 +1026,9 @@ async function handleFrameStretch(newHeight: number) {
     
     newFrame.name = newName;
     
-    console.log(`🏷️ Frame resize renomeado: ${newName}`);
+    console.log(`🏷️ Frame resize renamed: ${newName}`);
   } catch (namingError) {
-    console.log(`⚠️ Falha ao aplicar nomenclatura Dogo no resize: ${namingError}`);
+    console.log(`⚠️ Failed to apply Dogo naming convention on resize: ${namingError}`);
     newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)}) [Stretch]`;
   }
 

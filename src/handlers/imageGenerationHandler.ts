@@ -274,7 +274,7 @@ export class ImageGenerationHandler {
       if (selectedNodes.length === 0) {
         figma.ui.postMessage({
           type: 'error',
-          message: 'Por favor, selecione um elemento para substituir a imagem.'
+          message: 'Please select an element to replace the image.'
         });
         return;
       }
@@ -282,7 +282,7 @@ export class ImageGenerationHandler {
       if (selectedNodes.length > 1) {
         figma.ui.postMessage({
           type: 'error',
-          message: 'Por favor, selecione apenas um elemento por vez.'
+          message: 'Please select only one element at a time.'
         });
         return;
       }
@@ -293,7 +293,7 @@ export class ImageGenerationHandler {
       if (!('fills' in targetNode)) {
         figma.ui.postMessage({
           type: 'error',
-          message: 'O elemento selecionado não suporta imagens.'
+          message: 'The selected element does not support images.'
         });
         return;
       }

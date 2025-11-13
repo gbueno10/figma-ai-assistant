@@ -1,28 +1,28 @@
-// Classe para captura de screenshots do Figma
+// Class for capturing screenshots from Figma
 
 export class ScreenshotCapture {
   
-  // Captura screenshot do frame selecionado
+  // Capture screenshot of the selected frame
   static async captureFrame(frame: FrameNode): Promise<string> {
     try {
-      // Captura screenshot em formato base64
+      // Capture screenshot in base64 format
       const screenshot = await frame.exportAsync({
         format: 'PNG',
         constraint: { type: 'SCALE', value: 1 }
       });
       
-      // Converte para base64 string
+      // Convert to base64 string
       const base64 = figma.base64Encode(screenshot);
       return `data:image/png;base64,${base64}`;
     } catch (error) {
-      throw new Error(`Erro ao capturar screenshot: ${error}`);
+      throw new Error(`Error capturing screenshot: ${error}`);
     }
   }
 
-  // Valida se o frame é adequado para captura
+  // Validate if the frame is suitable for capture
   static validateFrame(frame: SceneNode): void {
     if (frame.type !== "FRAME") {
-      throw new Error("Por favor, selecione um frame!");
+      throw new Error("Please select a frame!");
     }
   }
 }

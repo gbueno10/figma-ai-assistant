@@ -493,10 +493,10 @@ const template = `
 
   <div class="ai-card">
     <div class="card-title">
-      📏 Redimensionamento Rápido
+      📏 Quick Resize
     </div>
     <div class="card-description">
-      Duplica e redimensiona o frame 1080x1080 selecionado para novos formatos verticais.
+      Duplicates and resizes the selected 1080x1080 frame to new vertical formats.
     </div>
     <div class="quick-actions">
       <button id="resizeTo1350Btn" type="button">
@@ -800,7 +800,7 @@ function initResize(): void {
 
   resizeTo1350Btn.addEventListener('click', () => {
     console.log('📏 Stretching frame to 1080x1350...');
-    resultResize.innerHTML = '⏳ Duplicando e redimensionando frame...';
+    resultResize.innerHTML = '⏳ Duplicating and resizing frame...';
     resultResize.className = 'result';
     resizeTo1350Btn.disabled = true;
     resizeTo1920Btn.disabled = true;
@@ -809,7 +809,7 @@ function initResize(): void {
 
   resizeTo1920Btn.addEventListener('click', () => {
     console.log('📏 Reflowing frame to 1080x1920...');
-    resultResize.innerHTML = '⏳ Duplicando e redimensionando frame...';
+    resultResize.innerHTML = '⏳ Duplicating and resizing frame...';
     resultResize.className = 'result';
     resizeTo1350Btn.disabled = true;
     resizeTo1920Btn.disabled = true;

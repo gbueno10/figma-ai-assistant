@@ -261,6 +261,7 @@ async function initializeBackendUrl() {
 async function handleImageGeneration(msg: any, isRegeneration: boolean) {
   try {
     const { ImageGenerationService } = await import('./services/imageGenerationService');
+    const { NamingUtils } = await import('./utils/namingConvention');
     
     if (isRegeneration) {
       // Regeneração de imagens selecionadas
@@ -281,17 +282,152 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
         return;
       }
       
-      // Passo 1: Disparar todas as requisições para a API em paralelo (isto está correto!)
+      // Passo 0: Duplicar frames se necessário (antes de gerar imagens)
+      const nodesToRegenerate: SceneNode[] = [];
+      const duplicatedFrames: FrameNode[] = [];
+      
       figma.ui.postMessage({
         type: 'image-progress',
-        message: `Gerando ${imageNodes.length} imagem(ns) em paralelo...`,
+        message: 'Duplicando frames...',
+        step: 0,
+        totalSteps: 2 + imageNodes.length
+      });
+      
+      for (const node of imageNodes) {
+        let targetNode = node;
+        
+        // Se o nó está dentro de um frame, duplicar o frame primeiro
+        if (node.parent && node.parent.type === 'FRAME') {
+          const originalFrame = node.parent as FrameNode;
+          console.log(`🎯 Duplicating frame for regeneration: ${originalFrame.name}`);
+          
+          // Duplicar o frame
+          const duplicatedFrame = originalFrame.clone() as FrameNode;
+          
+          // Posicionar ao lado do original
+          duplicatedFrame.x = originalFrame.x + originalFrame.width + 50;
+          duplicatedFrame.y = originalFrame.y;
+          
+          // Adicionar ao mesmo parent
+          if (originalFrame.parent && 'appendChild' in originalFrame.parent) {
+            originalFrame.parent.appendChild(duplicatedFrame);
+          } else {
+            figma.currentPage.appendChild(duplicatedFrame);
+          }
+          
+          // Aplicar convenção de nomes Dogo com novo ticket
+          try {
+            const getCurrentDateSuffix = (): string => {
+              const now = new Date();
+              const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+              const month = months[now.getMonth()];
+              const day = now.getDate();
+              return `${month}${day}`;
+            };
+            
+            // Gerar novo ticket number e variant específicos para IA (4000-9000 e XXX-AI)
+            const aiTicketNumber = Math.floor(Math.random() * (9000 - 4000 + 1)) + 4000; // 4000-9000
+            const aiVariantNumber = Math.floor(Math.random() * 900) + 100; // 100-999
+            const newTicketNumber = aiTicketNumber.toString();
+            const newVariant = `${aiVariantNumber}AI`; // ex: 124AI
+            
+            // Aplicar lógica de nomeação baseada no NOME do frame (não em metadados vazios)
+            const originalName = originalFrame.name;
+            const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
+            const nameBase = originalName.replace(dateRegex, '');
+            
+            // Remove sufixos como " - Permuted" que o Figma adiciona
+            const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
+            
+            // Remove prefixo Dogo_ se existir
+            const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
+            
+            // Split por underscore para pegar os componentes
+            const parts = withoutDogo.split('_');
+            
+            let newName = '';
+            
+            // Verifica se o primeiro componente é um ticket (Ticket123 ou 123)
+            const ticketRegex = /^(Ticket\d+|\d+)$/;
+            const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
+            
+            if (hasTicket && parts.length >= 2) {
+              // Caso 1: Tem ticket number no primeiro componente (convenção Dogo padrão)
+              // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
+              // Substituir apenas Ticket e Variant, manter o resto
+              const restOfParts = parts.slice(2); // Pula ticket e variant
+              newName = `Dogo_${newTicketNumber}_${newVariant}_${restOfParts.join('_')}_${getCurrentDateSuffix()}`;
+              console.log(`✅ Standard Dogo convention: replaced ticket and variant`);
+            } else {
+              // Caso 2: NÃO tem ticket number no início
+              // Adiciona novo ticket/variant ANTES de todos os componentes existentes
+              newName = `Dogo_${newTicketNumber}_${newVariant}_${withoutDogo}_${getCurrentDateSuffix()}`;
+              console.log(`⚠️ No ticket found, prepending new ticket/variant to: ${withoutDogo}`);
+            }
+            
+            duplicatedFrame.name = newName;
+            
+            console.log(`🏷️ Frame duplicated and renamed: ${newName}`);
+          } catch (namingError) {
+            console.log(`⚠️ Failed to apply naming convention:`, namingError);
+            duplicatedFrame.name = `${originalFrame.name} (Regenerated)`;
+          }
+          
+          // Encontrar o nó correspondente no frame duplicado
+          const findCorrespondingNode = (original: SceneNode, duplicated: FrameNode): SceneNode | null => {
+            const searchInChildren = (parent: BaseNode & ChildrenMixin): SceneNode | null => {
+              for (let i = 0; i < parent.children.length; i++) {
+                if (parent.children[i].name === node.name) {
+                  const originalPos = { x: node.x, y: node.y };
+                  const candidatePos = { x: parent.children[i].x, y: parent.children[i].y };
+                  
+                  if (Math.abs(originalPos.x - candidatePos.x) < 1 && 
+                      Math.abs(originalPos.y - candidatePos.y) < 1) {
+                    return parent.children[i] as SceneNode;
+                  }
+                }
+                
+                if ('children' in parent.children[i]) {
+                  const found = searchInChildren(parent.children[i] as BaseNode & ChildrenMixin);
+                  if (found) return found;
+                }
+              }
+              return null;
+            };
+            
+            return searchInChildren(duplicated);
+          };
+          
+          const correspondingNode = findCorrespondingNode(node, duplicatedFrame);
+          if (correspondingNode) {
+            targetNode = correspondingNode;
+            console.log(`✅ Found corresponding node in duplicated frame: ${targetNode.name}`);
+          } else {
+            console.log(`⚠️ Could not find corresponding node, using original`);
+          }
+          
+          duplicatedFrames.push(duplicatedFrame);
+        }
+        
+        nodesToRegenerate.push(targetNode);
+      }
+      
+      // Selecionar frames duplicados
+      if (duplicatedFrames.length > 0) {
+        figma.currentPage.selection = duplicatedFrames;
+      }
+      
+      // Passo 1: Disparar todas as requisições para a API em paralelo
+      figma.ui.postMessage({
+        type: 'image-progress',
+        message: `Gerando ${nodesToRegenerate.length} imagem(ns) em paralelo...`,
         step: 1,
-        totalSteps: 2 + imageNodes.length // Total de passos agora é dinâmico
+        totalSteps: 2 + nodesToRegenerate.length
       });
 
-      const regenerationPromises = imageNodes.map(async (node, index) => {
+      const regenerationPromises = nodesToRegenerate.map(async (node, index) => {
         try {
-          console.log(`🔄 [PARALLEL] Starting regeneration ${index + 1}/${imageNodes.length}: ${node.name}`);
+          console.log(`🔄 [PARALLEL] Starting regeneration ${index + 1}/${nodesToRegenerate.length}: ${node.name}`);
           
           // Extrai a imagem atual
           const imageFill = (node as any).fills.find((fill: any) => fill.type === 'IMAGE');
@@ -334,14 +470,14 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
 
       for (let i = 0; i < results.length; i++) {
           const result = results[i];
-          const node = imageNodes[i];
+          const node = nodesToRegenerate[i];
 
           // Feedback de progresso mais detalhado para o usuário
           figma.ui.postMessage({
               type: 'image-progress',
-              message: `Aplicando imagem ${i + 1} de ${imageNodes.length}...`,
+              message: `Aplicando imagem ${i + 1} de ${nodesToRegenerate.length}...`,
               step: 2 + i,
-              totalSteps: 2 + imageNodes.length
+              totalSteps: 2 + nodesToRegenerate.length
           });
 
           if (result.status === 'fulfilled') {
@@ -365,7 +501,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       }
       
       const message = errorCount > 0 
-        ? `Regeneradas ${successCount}/${imageNodes.length} imagens (${errorCount} falhas)`
+        ? `Regeneradas ${successCount}/${nodesToRegenerate.length} imagens (${errorCount} falhas)`
         : `Todas as ${successCount} imagens foram regeneradas com sucesso!`;
       
       figma.ui.postMessage({
@@ -680,26 +816,44 @@ async function handleFrameReflow(newHeight: number) {
 
   // Aplicar nomenclatura Dogo
   try {
-    const metadataResult = NamingUtils.readFrameMetadata(baseFrame);
-    const existingData = metadataResult.data;
+    // Apenas atualizar a dimensão no nome, mantendo ticket e variant originais
+    const originalName = baseFrame.name;
+    const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
+    const nameBase = originalName.replace(dateRegex, '');
     
-    // Gerar novo ticket e variant (é um resize, consideramos "novo conceito")
-    const newTicketNumber = NamingUtils.generateNewTicketNumber();
-    const newVariant = NamingUtils.generateRandomVariant();
+    // Remove sufixos como " - Permuted" que o Figma adiciona
+    const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
     
-    // Atualizar dimensão no formato correto
+    // Remove prefixo Dogo_ se existir
+    const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
+    
+    // Split por underscore para pegar os componentes
+    const parts = withoutDogo.split('_');
+    
+    // Atualizar a dimensão (geralmente é o 3º componente após ticket e variant)
+    // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
     const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
     
-    const newData = {
-      ...existingData,
-      ticketNumber: existingData.ticketNumber || newTicketNumber, // Apenas o número (ex: "6564")
-      variant: newVariant,
-      dimension: newDimension
-    };
+    let newName = '';
     
-    const newName = NamingUtils.generateCreativeName(newFrame, newData);
+    // Verifica se o primeiro componente é um ticket (Ticket123 ou 123)
+    const ticketRegex = /^(Ticket\d+|\d+)$/;
+    const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
+    
+    if (hasTicket && parts.length >= 3) {
+      // Caso 1: Tem ticket number no primeiro componente (convenção Dogo padrão)
+      // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
+      // Substituir apenas a Dimension (posição 2), manter ticket, variant e resto
+      const restOfParts = parts.slice(3); // Pula ticket, variant e dimension antiga
+      newName = `Dogo_${parts[0]}_${parts[1]}_${newDimension}_${restOfParts.join('_')}`;
+      console.log(`✅ Updated dimension in Dogo convention: ${newDimension}`);
+    } else {
+      // Caso 2: NÃO tem ticket number no início - apenas adiciona dimensão
+      newName = `Dogo_${withoutDogo}_${newDimension}`;
+      console.log(`⚠️ No ticket found, appending dimension to: ${withoutDogo}`);
+    }
+    
     newFrame.name = newName;
-    NamingUtils.saveFrameMetadata(newFrame, newData);
     
     console.log(`🏷️ Frame resize renomeado: ${newName}`);
   } catch (namingError) {
@@ -834,26 +988,44 @@ async function handleFrameStretch(newHeight: number) {
 
   // Aplicar nomenclatura Dogo
   try {
-    const metadataResult = NamingUtils.readFrameMetadata(baseFrame);
-    const existingData = metadataResult.data;
+    // Apenas atualizar a dimensão no nome, mantendo ticket e variant originais
+    const originalName = baseFrame.name;
+    const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
+    const nameBase = originalName.replace(dateRegex, '');
     
-    // Gerar novo ticket e variant (é um resize, consideramos "novo conceito")
-    const newTicketNumber = NamingUtils.generateNewTicketNumber();
-    const newVariant = NamingUtils.generateRandomVariant();
+    // Remove sufixos como " - Permuted" que o Figma adiciona
+    const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
     
-    // Atualizar dimensão no formato correto
+    // Remove prefixo Dogo_ se existir
+    const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
+    
+    // Split por underscore para pegar os componentes
+    const parts = withoutDogo.split('_');
+    
+    // Atualizar a dimensão (geralmente é o 3º componente após ticket e variant)
+    // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
     const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
     
-    const newData = {
-      ...existingData,
-      ticketNumber: existingData.ticketNumber || newTicketNumber, // Apenas o número (ex: "6564")
-      variant: newVariant,
-      dimension: newDimension
-    };
+    let newName = '';
     
-    const newName = NamingUtils.generateCreativeName(newFrame, newData);
+    // Verifica se o primeiro componente é um ticket (Ticket123 ou 123)
+    const ticketRegex = /^(Ticket\d+|\d+)$/;
+    const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
+    
+    if (hasTicket && parts.length >= 3) {
+      // Caso 1: Tem ticket number no primeiro componente (convenção Dogo padrão)
+      // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
+      // Substituir apenas a Dimension (posição 2), manter ticket, variant e resto
+      const restOfParts = parts.slice(3); // Pula ticket, variant e dimension antiga
+      newName = `Dogo_${parts[0]}_${parts[1]}_${newDimension}_${restOfParts.join('_')}`;
+      console.log(`✅ Updated dimension in Dogo convention: ${newDimension}`);
+    } else {
+      // Caso 2: NÃO tem ticket number no início - apenas adiciona dimensão
+      newName = `Dogo_${withoutDogo}_${newDimension}`;
+      console.log(`⚠️ No ticket found, appending dimension to: ${withoutDogo}`);
+    }
+    
     newFrame.name = newName;
-    NamingUtils.saveFrameMetadata(newFrame, newData);
     
     console.log(`🏷️ Frame resize renomeado: ${newName}`);
   } catch (namingError) {

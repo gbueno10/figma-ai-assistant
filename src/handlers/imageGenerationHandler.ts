@@ -14,6 +14,24 @@ function getCurrentDateSuffix(): string {
   return `${month}${day}`; // ex: Nov10
 }
 
+/**
+ * Gera um ticket number para imagens geradas por IA (4000-9000)
+ */
+function generateAITicketNumber(): string {
+  const min = 4000;
+  const max = 9000;
+  const ticketNumber = Math.floor(Math.random() * (max - min + 1)) + min;
+  return ticketNumber.toString();
+}
+
+/**
+ * Gera uma variant para imagens geradas por IA (ex: 124AI, 857AI)
+ */
+function generateAIVariant(): string {
+  const randomNumber = Math.floor(Math.random() * 900) + 100; // 100-999 (3 dígitos)
+  return `${randomNumber}AI`;
+}
+
 export class ImageGenerationHandler {
   
   // Handler principal para geração de nova imagem
@@ -88,40 +106,45 @@ export class ImageGenerationHandler {
           
           // Aplicar convenção de nomes Dogo com novo ticket
           try {
-            const metadataResult = NamingUtils.readFrameMetadata(originalFrame);
-            const existingData = metadataResult.data;
+            // Gerar novo ticket number e variant específicos para IA
+            const newTicketNumber = generateAITicketNumber(); // 4000-9000
+            const newVariant = generateAIVariant(); // ex: 124AI
             
-            // Gerar novo ticket number e variant para nova imagem
-            const newTicketNumber = NamingUtils.generateNewTicketNumber();
-            const newVariant = NamingUtils.generateRandomVariant();
-            
-            const newData = {
-              ...existingData,
-              ticketNumber: newTicketNumber,
-              variant: newVariant
-            };
-            
-            // Aplicar lógica de nomeação
+            // Aplicar lógica de nomeação baseada no NOME do frame (não em metadados vazios)
             const originalName = originalFrame.name;
             const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
             const nameBase = originalName.replace(dateRegex, '');
-            const nameRegex = /^(Dogo_)?(Ticket\d+|\d+)_([^_]+)/;
-            const match = nameBase.match(nameRegex);
+            
+            // Remove sufixos como " - Permuted" que o Figma adiciona
+            const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
+            
+            // Remove prefixo Dogo_ se existir
+            const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
+            
+            // Split por underscore para pegar os componentes
+            const parts = withoutDogo.split('_');
             
             let newName = '';
             
-            if (match) {
-              const restOfName = nameBase.substring(match[0].length);
-              newName = `Dogo_${newData.ticketNumber}_${newData.variant}${restOfName}_${getCurrentDateSuffix()}`;
+            // Verifica se o primeiro componente é um ticket (Ticket123 ou 123)
+            const ticketRegex = /^(Ticket\d+|\d+)$/;
+            const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
+            
+            if (hasTicket && parts.length >= 2) {
+              // Caso 1: Tem ticket number no primeiro componente (convenção Dogo padrão)
+              // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
+              // Substituir apenas Ticket e Variant, manter o resto
+              const restOfParts = parts.slice(2); // Pula ticket e variant
+              newName = `Dogo_${newTicketNumber}_${newVariant}_${restOfParts.join('_')}_${getCurrentDateSuffix()}`;
+              console.log(`✅ Standard Dogo convention: replaced ticket and variant`);
             } else {
-              const dim = newData.dimension ? `_${newData.dimension}` : '';
-              const lang = newData.language ? `_${newData.language}` : '';
-              const tactic = newData.petTactic ? `_${newData.petTactic}` : '';
-              newName = `Dogo_${newData.ticketNumber}_${newData.variant}${dim}${lang}${tactic}_${getCurrentDateSuffix()}`;
+              // Caso 2: NÃO tem ticket number no início
+              // Adiciona novo ticket/variant ANTES de todos os componentes existentes
+              newName = `Dogo_${newTicketNumber}_${newVariant}_${withoutDogo}_${getCurrentDateSuffix()}`;
+              console.log(`⚠️ No ticket found, prepending new ticket/variant to: ${withoutDogo}`);
             }
             
             targetFrame.name = newName;
-            NamingUtils.saveFrameMetadata(targetFrame, newData);
             
             console.log(`🏷️ Frame duplicated and renamed: ${newName}`);
           } catch (namingError) {
@@ -318,40 +341,45 @@ export class ImageGenerationHandler {
         
         // Aplicar convenção de nomes Dogo
         try {
-          const metadataResult = NamingUtils.readFrameMetadata(originalFrame);
-          const existingData = metadataResult.data;
+          // Gerar novo ticket number e variant específicos para IA
+          const newTicketNumber = generateAITicketNumber(); // 4000-9000
+          const newVariant = generateAIVariant(); // ex: 124AI
           
-          // Gerar novo ticket number e variant para substituição de imagem
-          const newTicketNumber = NamingUtils.generateNewTicketNumber();
-          const newVariant = NamingUtils.generateRandomVariant();
-          
-          const newData = {
-            ...existingData,
-            ticketNumber: newTicketNumber,
-            variant: newVariant
-          };
-          
-          // Aplicar lógica de nomeação (mesma do designModificationHandler)
+          // Aplicar lógica de nomeação baseada no NOME do frame (não em metadados vazios)
           const originalName = originalFrame.name;
           const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
           const nameBase = originalName.replace(dateRegex, '');
-          const nameRegex = /^(Dogo_)?(Ticket\d+|\d+)_([^_]+)/;
-          const match = nameBase.match(nameRegex);
+          
+          // Remove sufixos como " - Permuted" que o Figma adiciona
+          const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
+          
+          // Remove prefixo Dogo_ se existir
+          const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
+          
+          // Split por underscore para pegar os componentes
+          const parts = withoutDogo.split('_');
           
           let newName = '';
           
-          if (match) {
-            const restOfName = nameBase.substring(match[0].length);
-            newName = `Dogo_${newData.ticketNumber}_${newData.variant}${restOfName}_${getCurrentDateSuffix()}`;
+          // Verifica se o primeiro componente é um ticket (Ticket123 ou 123)
+          const ticketRegex = /^(Ticket\d+|\d+)$/;
+          const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
+          
+          if (hasTicket && parts.length >= 2) {
+            // Caso 1: Tem ticket number no primeiro componente (convenção Dogo padrão)
+            // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
+            // Substituir apenas Ticket e Variant, manter o resto
+            const restOfParts = parts.slice(2); // Pula ticket e variant
+            newName = `Dogo_${newTicketNumber}_${newVariant}_${restOfParts.join('_')}_${getCurrentDateSuffix()}`;
+            console.log(`✅ Standard Dogo convention: replaced ticket and variant`);
           } else {
-            const dim = newData.dimension ? `_${newData.dimension}` : '';
-            const lang = newData.language ? `_${newData.language}` : '';
-            const tactic = newData.petTactic ? `_${newData.petTactic}` : '';
-            newName = `Dogo_${newData.ticketNumber}_${newData.variant}${dim}${lang}${tactic}_${getCurrentDateSuffix()}`;
+            // Caso 2: NÃO tem ticket number no início
+            // Adiciona novo ticket/variant ANTES de todos os componentes existentes
+            newName = `Dogo_${newTicketNumber}_${newVariant}_${withoutDogo}_${getCurrentDateSuffix()}`;
+            console.log(`⚠️ No ticket found, prepending new ticket/variant to: ${withoutDogo}`);
           }
           
           duplicatedFrame.name = newName;
-          NamingUtils.saveFrameMetadata(duplicatedFrame, newData);
           
           console.log(`🏷️ Frame duplicated and renamed: ${newName}`);
         } catch (namingError) {

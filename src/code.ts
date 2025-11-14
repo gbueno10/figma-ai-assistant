@@ -261,6 +261,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
   try {
     const { ImageGenerationService } = await import('./services/imageGenerationService');
     const { NamingUtils } = await import('./utils/namingConvention');
+    const { prepareNodesForRegeneration } = await import('./utils/figmaUtils');
     
     if (isRegeneration) {
       // Regeneração de imagens selecionadas
@@ -282,138 +283,22 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       }
       
       // Passo 0: Duplicar frames se necessário (antes de gerar imagens)
-      const nodesToRegenerate: SceneNode[] = [];
-      const duplicatedFrames: FrameNode[] = [];
-      
+      // Usa a função utilitária dedicada para preparação de regeneração
       figma.ui.postMessage({
         type: 'image-progress',
-        message: 'Duplicating frames...',
+        message: 'Duplicating frames and preparing nodes...',
         step: 0,
         totalSteps: 2 + imageNodes.length
       });
       
-      for (const node of imageNodes) {
-        let targetNode = node;
-        
-        // Se o nó está dentro de um frame, duplicar o frame primeiro
-        if (node.parent && node.parent.type === 'FRAME') {
-          const originalFrame = node.parent as FrameNode;
-          console.log(`🎯 Duplicating frame for regeneration: ${originalFrame.name}`);
-          
-          // Duplicar o frame
-          const duplicatedFrame = originalFrame.clone() as FrameNode;
-          
-          // Posicionar ao lado do original
-          duplicatedFrame.x = originalFrame.x + originalFrame.width + 50;
-          duplicatedFrame.y = originalFrame.y;
-          
-          // Adicionar ao mesmo parent
-          if (originalFrame.parent && 'appendChild' in originalFrame.parent) {
-            originalFrame.parent.appendChild(duplicatedFrame);
-          } else {
-            figma.currentPage.appendChild(duplicatedFrame);
-          }
-          
-          // Apply Dogo naming convention
-          try {
-            const getCurrentDateSuffix = (): string => {
-              const now = new Date();
-              const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-              const month = months[now.getMonth()];
-              const day = now.getDate();
-              return `${month}${day}`;
-            };
-            
-            // Gerar novo ticket number e variant específicos para IA (4000-9000 e XXX-AI)
-            const aiTicketNumber = Math.floor(Math.random() * (9000 - 4000 + 1)) + 4000; // 4000-9000
-            const aiVariantNumber = Math.floor(Math.random() * 900) + 100; // 100-999
-            const newTicketNumber = aiTicketNumber.toString();
-            const newVariant = `${aiVariantNumber}AI`; // ex: 124AI
-            
-            // Aplicar lógica de nomeação baseada no NOME do frame (não em metadados vazios)
-            const originalName = originalFrame.name;
-            const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
-            const nameBase = originalName.replace(dateRegex, '');
-            
-            // Remove sufixos como " - Permuted" que o Figma adiciona
-            const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
-            
-            // Remove prefixo Dogo_ se existir
-            const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
-            
-            // Split por underscore para pegar os componentes
-            const parts = withoutDogo.split('_');
-            
-            let newName = '';
-            
-            // Verifica se o primeiro componente é um ticket (Ticket123 ou 123)
-            const ticketRegex = /^(Ticket\d+|\d+)$/;
-            const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
-            
-            if (hasTicket && parts.length >= 2) {
-              // Caso 1: Tem ticket number no primeiro componente (convenção Dogo padrão)
-              // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
-              // Substituir apenas Ticket e Variant, manter o resto
-              const restOfParts = parts.slice(2); // Pula ticket e variant
-              newName = `Dogo_${newTicketNumber}_${newVariant}_${restOfParts.join('_')}_${getCurrentDateSuffix()}`;
-              console.log(`✅ Standard Dogo convention: replaced ticket and variant`);
-            } else {
-              // Caso 2: NÃO tem ticket number no início
-              // Adiciona novo ticket/variant ANTES de todos os componentes existentes
-              newName = `Dogo_${newTicketNumber}_${newVariant}_${withoutDogo}_${getCurrentDateSuffix()}`;
-              console.log(`⚠️ No ticket found, prepending new ticket/variant to: ${withoutDogo}`);
-            }
-            
-            duplicatedFrame.name = newName;
-            
-            console.log(`🏷️ Frame duplicated and renamed: ${newName}`);
-          } catch (namingError) {
-            console.log(`⚠️ Failed to apply naming convention:`, namingError);
-            duplicatedFrame.name = `${originalFrame.name} (Regenerated)`;
-          }
-          
-          // Encontrar o nó correspondente no frame duplicado
-          const findCorrespondingNode = (original: SceneNode, duplicated: FrameNode): SceneNode | null => {
-            const searchInChildren = (parent: BaseNode & ChildrenMixin): SceneNode | null => {
-              for (let i = 0; i < parent.children.length; i++) {
-                if (parent.children[i].name === node.name) {
-                  const originalPos = { x: node.x, y: node.y };
-                  const candidatePos = { x: parent.children[i].x, y: parent.children[i].y };
-                  
-                  if (Math.abs(originalPos.x - candidatePos.x) < 1 && 
-                      Math.abs(originalPos.y - candidatePos.y) < 1) {
-                    return parent.children[i] as SceneNode;
-                  }
-                }
-                
-                if ('children' in parent.children[i]) {
-                  const found = searchInChildren(parent.children[i] as BaseNode & ChildrenMixin);
-                  if (found) return found;
-                }
-              }
-              return null;
-            };
-            
-            return searchInChildren(duplicated);
-          };
-          
-          const correspondingNode = findCorrespondingNode(node, duplicatedFrame);
-          if (correspondingNode) {
-            targetNode = correspondingNode;
-            console.log(`✅ Found corresponding node in duplicated frame: ${targetNode.name}`);
-          } else {
-            console.log(`⚠️ Could not find corresponding node, using original`);
-          }
-          
-          duplicatedFrames.push(duplicatedFrame);
-        }
-        
-        nodesToRegenerate.push(targetNode);
-      }
+      const { nodesToRegenerate, duplicatedFrames } = prepareNodesForRegeneration(imageNodes);
       
-      // Selecionar frames duplicados
+      // Selecionar frames duplicados para feedback visual
       if (duplicatedFrames.length > 0) {
         figma.currentPage.selection = duplicatedFrames;
+        figma.notify(`✅ ${duplicatedFrames.length} frame(s) duplicated with Dogo naming convention`, {
+          timeout: 3000
+        });
       }
       
       // Passo 1: Disparar todas as requisições para a API em paralelo

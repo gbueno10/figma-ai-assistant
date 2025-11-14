@@ -472,15 +472,6 @@ const template = `
           🚀 Edit Frame Images
         </button>
       </form>
-      <div id="editImagesSummary" class="preview-list"></div>
-      <div class="preview-actions" id="editImagesPreviewActions">
-        <button type="button" id="confirmEditImagesBtn">
-          ✅ Confirm & Run Edits
-        </button>
-        <button type="button" id="cancelEditImagesBtn" class="secondary">
-          ❌ Cancel
-        </button>
-      </div>
       <div class="loading" id="loadingEditImages">
         ⏳ Processing images...
         <div class="progress-container">
@@ -530,12 +521,6 @@ const template = `
             <label class="checkbox-option">
               <input type="checkbox" name="modifyTypes" value="color" checked> Colors
             </label>
-            <label class="checkbox-option">
-              <input type="checkbox" name="modifyTypes" value="layout"> Layout
-            </label>
-            <label class="checkbox-option">
-              <input type="checkbox" name="modifyTypes" value="style"> Styles
-            </label>
           </div>
         </div>
         <button type="submit" id="modifyBtn">
@@ -564,7 +549,6 @@ type PluginToUiMessage = {
 
 let stylesInjected = false;
 let messageListenerRegistered = false;
-let hasPendingEditPreview = false;
 
 export default function initUI(rootNode: HTMLElement): void {
   injectStyles();
@@ -708,14 +692,6 @@ function initImageEditing(): void {
   const editImagesForm = getElement<HTMLFormElement>('editImagesForm');
   const editImagesBtn = getElement<HTMLButtonElement>('editImagesBtn');
   const editPrompt = getElement<HTMLTextAreaElement>('editPrompt');
-  const confirmEditImagesBtn = getElement<HTMLButtonElement>('confirmEditImagesBtn');
-  const cancelEditImagesBtn = getElement<HTMLButtonElement>('cancelEditImagesBtn');
-  const previewActions = getElement<HTMLDivElement>('editImagesPreviewActions');
-
-  confirmEditImagesBtn.disabled = true;
-  cancelEditImagesBtn.disabled = true;
-  previewActions.style.display = 'none';
-  clearImageEditPreview();
 
   editImagesForm.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -734,18 +710,14 @@ function initImageEditing(): void {
 
     saveSettings();
 
-    clearImageEditPreview();
     getElement<HTMLDivElement>('loadingEditImages').style.display = 'block';
     editImagesBtn.disabled = true;
-    confirmEditImagesBtn.disabled = true;
-    cancelEditImagesBtn.disabled = true;
-    previewActions.style.display = 'none';
     getElement<HTMLDivElement>('resultEditImages').innerHTML = '';
 
     resetProgress(
       'progressBarEditImages',
       'progressTextEditImages',
-      'Scanning selected frame for images...'
+      'Starting image editing...'
     );
 
     postPluginMessage({
@@ -753,43 +725,6 @@ function initImageEditing(): void {
       prompt,
       apiKey
     });
-  });
-
-  confirmEditImagesBtn.addEventListener('click', () => {
-    if (!hasPendingEditPreview) {
-      return;
-    }
-
-    const prompt = editPrompt.value.trim();
-    if (!prompt) {
-      showResult('Please provide an editing prompt.', 'error', 'resultEditImages');
-      return;
-    }
-
-    const apiKey = getElement<HTMLInputElement>('apiKey').value.trim();
-
-    getElement<HTMLDivElement>('loadingEditImages').style.display = 'block';
-    getElement<HTMLDivElement>('resultEditImages').innerHTML = '';
-    confirmEditImagesBtn.disabled = true;
-    cancelEditImagesBtn.disabled = true;
-    clearImageEditPreview();
-    previewActions.style.display = 'none';
-
-    resetProgress('progressBarEditImages', 'progressTextEditImages', 'Starting image editing...');
-
-    postPluginMessage({
-      type: 'confirm-edit-frame-images',
-      prompt,
-      apiKey
-    });
-  });
-
-  cancelEditImagesBtn.addEventListener('click', () => {
-    postPluginMessage({ type: 'cancel-edit-frame-images' });
-    clearImageEditPreview();
-    getElement<HTMLDivElement>('loadingEditImages').style.display = 'none';
-    editImagesBtn.disabled = false;
-    getElement<HTMLDivElement>('resultEditImages').innerHTML = '';
   });
 }
 
@@ -1017,33 +952,6 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       break;
     }
 
-    case 'image-edit-summary': {
-      getElement<HTMLDivElement>('loadingEditImages').style.display = 'none';
-      const editBtn = getElement<HTMLButtonElement>('editImagesBtn');
-      editBtn.disabled = true;
-
-      const totalImages = Number(msg.totalImages ?? 0);
-      const images = Array.isArray(msg.images) ? (msg.images as Array<Record<string, unknown>>) : [];
-      const frameName = typeof msg.frameName === 'string' ? msg.frameName : '';
-
-      showImageEditSummary({ frameName, totalImages, images });
-
-      if (totalImages > 0) {
-        showResult(
-          `Found ${totalImages} image(s). Review the list below and confirm to run the edits.`,
-          'success',
-          'resultEditImages'
-        );
-      } else {
-        showResult('No images detected in the selected frame.', 'error', 'resultEditImages');
-      }
-
-      if (totalImages === 0) {
-        editBtn.disabled = false;
-      }
-      break;
-    }
-
     case 'image-edit-progress': {
       updateProgress('progressBarEditImages', 'progressTextEditImages', msg);
       break;
@@ -1052,7 +960,6 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
     case 'image-edit-complete': {
       getElement<HTMLDivElement>('loadingEditImages').style.display = 'none';
       getElement<HTMLButtonElement>('editImagesBtn').disabled = false;
-      clearImageEditPreview();
       const resultDiv = getElement<HTMLDivElement>('resultEditImages');
       resultDiv.innerHTML = `
         <div class="result success">
@@ -1060,14 +967,6 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
         </div>
       `;
       console.log('✅ Image editing completed');
-      break;
-    }
-
-    case 'image-edit-cancelled': {
-      getElement<HTMLDivElement>('loadingEditImages').style.display = 'none';
-      getElement<HTMLButtonElement>('editImagesBtn').disabled = false;
-      clearImageEditPreview();
-      showResult('Image edit cancelled.', 'error', 'resultEditImages');
       break;
     }
 
@@ -1105,9 +1004,6 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       if (msg.context === 'resize') {
         getElement<HTMLButtonElement>('resizeTo1350Btn').disabled = false;
         getElement<HTMLButtonElement>('resizeTo1920Btn').disabled = false;
-      }
-      if (msg.context === 'image-edit') {
-        clearImageEditPreview();
       }
 
       const message = typeof msg.message === 'string' ? msg.message : 'Unknown error';
@@ -1154,77 +1050,6 @@ function showResult(message: string, type: 'success' | 'error', containerId: str
   const resultDiv = getElement<HTMLDivElement>(containerId);
   resultDiv.innerHTML = message.replace(/\n/g, '<br>');
   resultDiv.className = `result ${type}`;
-}
-
-function showImageEditSummary({
-  frameName,
-  totalImages,
-  images,
-}: {
-  frameName: string;
-  totalImages: number;
-  images: Array<Record<string, unknown>>;
-}): void {
-  const summaryDiv = getElement<HTMLDivElement>('editImagesSummary');
-  const actionsDiv = getElement<HTMLDivElement>('editImagesPreviewActions');
-  const confirmBtn = getElement<HTMLButtonElement>('confirmEditImagesBtn');
-  const cancelBtn = getElement<HTMLButtonElement>('cancelEditImagesBtn');
-
-  if (totalImages <= 0) {
-    clearImageEditPreview();
-    hasPendingEditPreview = false;
-    return;
-  }
-
-  const listItems = images.map((rawItem, defaultIndex) => {
-    const index = typeof rawItem.index === 'number' ? rawItem.index : defaultIndex + 1;
-    const nameValue = typeof rawItem.name === 'string' && rawItem.name.trim().length > 0
-      ? rawItem.name.trim()
-      : 'Untitled';
-    const typeValue = typeof rawItem.type === 'string' ? rawItem.type : '';
-    const widthValue = typeof rawItem.width === 'number' ? rawItem.width : undefined;
-    const heightValue = typeof rawItem.height === 'number' ? rawItem.height : undefined;
-
-    const metaParts: string[] = [];
-    if (typeValue) {
-      metaParts.push(escapeHtml(typeValue));
-    }
-    if (widthValue && heightValue) {
-      metaParts.push(`${widthValue}x${heightValue}`);
-    }
-
-    const metaLabel = metaParts.length > 0 ? ` <span class="preview-meta">(${metaParts.join(' | ')})</span>` : '';
-
-    return `<li><span class="preview-index">#${index}</span><span class="preview-name">${escapeHtml(nameValue)}</span>${metaLabel}</li>`;
-  });
-
-  summaryDiv.innerHTML = `
-    <div><strong>Frame:</strong> ${escapeHtml(frameName || 'Unnamed frame')}</div>
-    <div><strong>Images detected:</strong> ${totalImages}</div>
-    <ul>
-      ${listItems.join('')}
-    </ul>
-  `;
-
-  summaryDiv.style.display = 'block';
-  actionsDiv.style.display = 'flex';
-  confirmBtn.disabled = false;
-  cancelBtn.disabled = false;
-  hasPendingEditPreview = true;
-}
-
-function clearImageEditPreview(): void {
-  const summaryDiv = getElement<HTMLDivElement>('editImagesSummary');
-  const actionsDiv = getElement<HTMLDivElement>('editImagesPreviewActions');
-  const confirmBtn = getElement<HTMLButtonElement>('confirmEditImagesBtn');
-  const cancelBtn = getElement<HTMLButtonElement>('cancelEditImagesBtn');
-
-  summaryDiv.innerHTML = '';
-  summaryDiv.style.display = 'none';
-  actionsDiv.style.display = 'none';
-  confirmBtn.disabled = true;
-  cancelBtn.disabled = true;
-  hasPendingEditPreview = false;
 }
 
 function escapeHtml(value: unknown): string {

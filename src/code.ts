@@ -12,14 +12,6 @@ const API_KEY_STORAGE_KEY = 'figma-ai-assistant-api-key';
 const BACKEND_URL_STORAGE_KEY = 'figma-ai-assistant-backend-url';
 
 let aiAssistant: AIDesignAssistant;
-interface PendingFrameEditContext {
-  frameId: string;
-  frameName: string;
-  nodeIds: string[];
-  size?: string;
-}
-
-let pendingFrameEditContext: PendingFrameEditContext | null = null;
 
 export default function runPlugin() {
   showUI({ width: 400, height: 500 });
@@ -190,19 +182,8 @@ function initializeUiMessageHandler() {
       await handleFrameReflow(Number(msg.newHeight));
       
     } else if (msg.type === 'edit-frame-images') {
-      console.log('🖼️ Preparing frame image editing preview...');
-      await prepareFrameImageEditing(msg);
-    } else if (msg.type === 'confirm-edit-frame-images') {
-      console.log('✅ Confirming frame image editing...');
-      await executePendingFrameImageEditing({
-        prompt: msg.prompt,
-        apiKey: msg.apiKey,
-        size: msg.size,
-      });
-    } else if (msg.type === 'cancel-edit-frame-images') {
-      console.log('🚫 Cancelling frame image editing...');
-      pendingFrameEditContext = null;
-      figma.ui.postMessage({ type: 'image-edit-cancelled' });
+      console.log('🖼️ Starting frame image editing directly...');
+      await executeFrameImageEditing(msg);
     }
   } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -438,8 +419,8 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
   }
 }
 
-// Handler para edição em lote de imagens dentro de um frame
-async function prepareFrameImageEditing(msg: any) {
+// Handler para edição em lote de imagens dentro de um frame (execução direta)
+async function executeFrameImageEditing(msg: any) {
   try {
     const selection = figma.currentPage.selection;
     if (selection.length !== 1) {
@@ -448,7 +429,6 @@ async function prepareFrameImageEditing(msg: any) {
         message: 'Please select exactly one frame for image editing',
         context: 'image-edit'
       });
-      pendingFrameEditContext = null;
       return;
     }
 
@@ -459,7 +439,6 @@ async function prepareFrameImageEditing(msg: any) {
         message: 'Please select a Frame (not a group or other element)',
         context: 'image-edit'
       });
-      pendingFrameEditContext = null;
       return;
     }
 
@@ -471,101 +450,62 @@ async function prepareFrameImageEditing(msg: any) {
         message: 'No images found within the selected frame',
         context: 'image-edit'
       });
-      pendingFrameEditContext = null;
       return;
     }
 
-    pendingFrameEditContext = {
-      frameId: selectedNode.id,
-      frameName: selectedNode.name,
-      nodeIds: imageNodes.map((node) => node.id),
-      size: msg.size,
-    };
-
-    console.log(`🖼️ Found ${imageNodes.length} image(s) in frame: ${selectedNode.name}`);
-
-    const summaries = imageNodes.map((node, index) => ({
-      id: node.id,
-      name: node.name,
-      type: node.type,
-      index: index + 1,
-      width: 'width' in node ? Math.round((node as any).width) : undefined,
-      height: 'height' in node ? Math.round((node as any).height) : undefined,
-    }));
-
-    figma.ui.postMessage({
-      type: 'image-edit-summary',
-      frameName: selectedNode.name,
-      totalImages: imageNodes.length,
-      images: summaries,
-    });
-  } catch (error) {
-    console.log('❌ Frame image preview error:', error);
-    pendingFrameEditContext = null;
-    figma.ui.postMessage({
-      type: 'error',
-      message: error instanceof Error ? error.message : 'Unknown error preparing frame image editing',
-      context: 'image-edit'
-    });
-  }
-}
-
-async function executePendingFrameImageEditing({ prompt, apiKey, size }: { prompt: string; apiKey?: string; size?: string; }) {
-  if (!pendingFrameEditContext) {
-    figma.ui.postMessage({
-      type: 'error',
-      message: 'No pending frame image edit found. Please scan the frame again.',
-      context: 'image-edit'
-    });
-    return;
-  }
-
-  const sanitizedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
-  if (!sanitizedPrompt) {
-    figma.ui.postMessage({
-      type: 'error',
-      message: 'Please provide an editing prompt to continue.',
-      context: 'image-edit'
-    });
-    return;
-  }
-
-  try {
-    const frameNode = figma.getNodeById(pendingFrameEditContext.frameId);
-    if (!frameNode || frameNode.type !== 'FRAME') {
+    const sanitizedPrompt = typeof msg.prompt === 'string' ? msg.prompt.trim() : '';
+    if (!sanitizedPrompt) {
       figma.ui.postMessage({
         type: 'error',
-        message: 'The selected frame is no longer available. Please select it again.',
+        message: 'Please provide an editing prompt to continue.',
         context: 'image-edit'
       });
-      pendingFrameEditContext = null;
       return;
     }
 
-    const allImageNodes = findImageNodes(frameNode);
-    const nodesToEdit = pendingFrameEditContext.nodeIds
-      .map((id) => allImageNodes.find((node) => node.id === id) ?? null)
-      .filter((node): node is SceneNode => Boolean(node));
+    console.log(`🖼️ Found ${imageNodes.length} image(s) in frame: ${selectedNode.name}. Starting editing...`);
 
+    // Passo 0: Duplicar o frame com convenção Dogo antes de editar as imagens
+    figma.ui.postMessage({
+      type: 'image-edit-progress',
+      message: 'Duplicating frame with Dogo naming...',
+      step: 0,
+      totalSteps: 3
+    });
+
+    const { duplicateFrameWithDogoNaming, findCorrespondingNode } = await import('./utils/figmaUtils');
+    
+    const duplicatedFrame = duplicateFrameWithDogoNaming(selectedNode as FrameNode);
+    console.log(`✅ Frame duplicated: ${duplicatedFrame.name}`);
+    
+    // Encontrar os nós de imagem correspondentes no frame duplicado
+    const nodesToEdit: SceneNode[] = [];
+    for (const originalImageNode of imageNodes) {
+      const correspondingNode = findCorrespondingNode(originalImageNode, duplicatedFrame);
+      if (correspondingNode) {
+        nodesToEdit.push(correspondingNode);
+        console.log(`✅ Found corresponding node for ${originalImageNode.name}`);
+      } else {
+        console.log(`⚠️ Could not find corresponding node for ${originalImageNode.name}`);
+      }
+    }
+    
     if (nodesToEdit.length === 0) {
       figma.ui.postMessage({
         type: 'error',
-        message: 'No images matched the original selection. Please scan the frame again.',
+        message: 'Could not find corresponding images in duplicated frame',
         context: 'image-edit'
       });
-      pendingFrameEditContext = null;
       return;
     }
-
-    if (nodesToEdit.length < pendingFrameEditContext.nodeIds.length) {
-      const skipped = pendingFrameEditContext.nodeIds.length - nodesToEdit.length;
-      console.log(`⚠️ Detected ${skipped} image(s) removed or changed since the preview. They will be skipped.`);
-      figma.notify(`⚠️ ${skipped} image(s) changed after the preview and were skipped.`, { timeout: 3000 });
-    }
+    
+    // Selecionar o frame duplicado para feedback visual
+    figma.currentPage.selection = [duplicatedFrame];
+    figma.notify(`✅ Frame duplicated with Dogo naming convention. Editing ${nodesToEdit.length} image(s)...`, {
+      timeout: 3000
+    });
 
     const { ImageGenerationService } = await import('./services/imageGenerationService');
-
-    const sizeToUse = size ?? pendingFrameEditContext.size;
 
     figma.ui.postMessage({
       type: 'image-edit-progress',
@@ -594,8 +534,8 @@ async function executePendingFrameImageEditing({ prompt, apiKey, size }: { promp
         const editedImageBytes = await ImageGenerationService.editImage(
           imageBytes,
           sanitizedPrompt,
-          apiKey,
-          sizeToUse,
+          msg.apiKey,
+          msg.size,
           {
             totalImages: nodesToEdit.length,
             imageIndex: index + 1,
@@ -666,8 +606,6 @@ async function executePendingFrameImageEditing({ prompt, apiKey, size }: { promp
       context: 'image-edit'
     });
     figma.notify(`❌ Frame image editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
-  } finally {
-    pendingFrameEditContext = null;
   }
 }
 

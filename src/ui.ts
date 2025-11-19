@@ -324,11 +324,44 @@ button.secondary:hover {
   border-radius: 10px;
   margin-top: 12px;
   font-size: 12px;
-  max-height: 140px;
+  max-height: 300px;
   overflow-y: auto;
   font-family: 'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   line-height: 1.4;
   border: 1px solid rgba(148, 163, 184, 0.4);
+  position: relative;
+}
+
+.json-output.minimized {
+  max-height: 80px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+}
+
+.json-output.minimized::after {
+  content: '▼ Click to expand';
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.json-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.json-actions button {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 0;
 }
 
 .api-key-info {
@@ -343,20 +376,54 @@ button.secondary:hover {
 .settings-section {
   background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
   border-radius: 16px;
-  padding: 20px;
+  padding: 0;
   margin-bottom: 20px;
   border: 1px solid #e0e7ff;
   box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.1), 0 4px 6px -2px rgba(129, 140, 248, 0.05);
+  overflow: hidden;
+}
+
+.settings-header {
+  padding: 16px 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background 0.2s ease;
+  user-select: none;
+}
+
+.settings-header:hover {
+  background: rgba(79, 70, 229, 0.05);
 }
 
 .settings-title {
   font-size: 15px;
   font-weight: 600;
   color: #4338ca;
-  margin-bottom: 16px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  margin: 0;
+}
+
+.settings-toggle {
+  font-size: 18px;
+  color: #4338ca;
+  transition: transform 0.2s ease;
+}
+
+.settings-toggle.expanded {
+  transform: rotate(180deg);
+}
+
+.settings-content {
+  padding: 0 20px 20px 20px;
+  display: none;
+}
+
+.settings-content.expanded {
+  display: block;
 }
 
 .progress-text {
@@ -389,27 +456,77 @@ const template = `
   </div>
   <div class="main-content">
     <div class="settings-section">
-      <div class="settings-title">⚙️ Settings</div>
-      <div class="form-group">
-        <label for="apiKey">OpenAI API Key:</label>
-        <input type="password" id="apiKey" placeholder="sk-...">
-        <div class="api-key-info">
-          🔒 Stored locally and securely
-        </div>
+      <div class="settings-header" id="settingsHeader">
+        <div class="settings-title">⚙️ Settings and Setup</div>
+        <div class="settings-toggle">▼</div>
       </div>
-      <div class="form-group">
-        <label for="backendUrl">Backend URL:</label>
-        <input type="text" id="backendUrl" placeholder="http://localhost:3000/api">
-        <div class="api-key-info">
-          🌐 Defaults to the local Docker container
+      <div class="settings-content" id="settingsContent">
+        <div class="form-group">
+          <label for="apiKey">OpenAI API Key:</label>
+          <input type="password" id="apiKey" placeholder="sk-...">
+          <div class="api-key-info">
+            🔒 Stored locally and securely
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="backendUrl">Backend URL:</label>
+          <input type="text" id="backendUrl" placeholder="http://localhost:3000/api">
+          <div class="api-key-info">
+            🌐 Defaults to the local Docker container
+          </div>
+        </div>
+        
+        <button id="analyzeBtn" class="secondary" style="margin-top: 12px;">
+          📊 Analyze Design (Show JSON)
+        </button>
+        <div id="jsonOutput" class="json-output" style="display: none;"></div>
+        <div id="jsonActions" class="json-actions" style="display: none;">
+          <button id="copyJsonBtn" class="secondary">
+            📋 Copy JSON
+          </button>
+          <button id="closeJsonBtn" class="secondary">
+            ✕ Close
+          </button>
         </div>
       </div>
     </div>
 
-    <button id="analyzeBtn" class="secondary" style="margin-bottom: 20px;">
-      📊 Analyze Design (Show JSON)
-    </button>
-    <div id="jsonOutput" class="json-output" style="display: none;"></div>
+    <div class="ai-card">
+      <div class="card-title">
+        🎨 AI Design Modification
+      </div>
+      <div class="card-description">
+        Describe your desired changes in natural language and let AI transform your design intelligently.
+      </div>
+      <form id="modifyForm">
+        <div class="form-group">
+          <label for="modifyPrompt">Describe modifications:</label>
+          <textarea id="modifyPrompt" placeholder="Make the design more modern, change colors to a dark theme, improve typography hierarchy..." required></textarea>
+        </div>
+        <div class="form-group">
+          <label>Modification Types:</label>
+          <div class="checkbox-group">
+            <label class="checkbox-option">
+              <input type="checkbox" name="modifyTypes" value="text" checked> Text
+            </label>
+            <label class="checkbox-option">
+              <input type="checkbox" name="modifyTypes" value="color" checked> Colors
+            </label>
+          </div>
+        </div>
+        <button type="submit" id="modifyBtn">
+          🚀 Transform with AI
+        </button>
+      </form>
+      <div class="loading" id="loadingModify">
+        ⏳ Transforming design...
+        <div class="progress-container">
+          <div class="progress-bar" id="progressBarModify"></div>
+        </div>
+        <div class="progress-text" id="progressTextModify"></div>
+      </div>
+      <div id="resultModify"></div>
+    </div>
 
     <div class="ai-card">
       <div class="card-title">
@@ -478,9 +595,9 @@ const template = `
           <div class="progress-bar" id="progressBarEditImages"></div>
         </div>
         <div class="progress-text" id="progressTextEditImages"></div>
+      </div>
+      <div id="resultEditImages"></div>
     </div>
-    <div id="resultEditImages"></div>
-  </div>
 
   <div class="ai-card">
     <div class="card-title">
@@ -493,49 +610,12 @@ const template = `
       <button id="resizeTo1350Btn" type="button">
         Vertical (1080x1350)
       </button>
-      <button id="resizeTo1920Btn" type="button">
+      <button id="resizeTo1920Btn" type="button" disabled>
         Story (1080x1920)
       </button>
     </div>
     <div id="resultResize"></div>
   </div>
-
-  <div class="ai-card">
-    <div class="card-title">
-      🎨 AI Design Modification
-      </div>
-      <div class="card-description">
-        Describe your desired changes in natural language and let AI transform your design intelligently.
-      </div>
-      <form id="modifyForm">
-        <div class="form-group">
-          <label for="modifyPrompt">Describe modifications:</label>
-          <textarea id="modifyPrompt" placeholder="Make the design more modern, change colors to a dark theme, improve typography hierarchy..." required></textarea>
-        </div>
-        <div class="form-group">
-          <label>Modification Types:</label>
-          <div class="checkbox-group">
-            <label class="checkbox-option">
-              <input type="checkbox" name="modifyTypes" value="text" checked> Text
-            </label>
-            <label class="checkbox-option">
-              <input type="checkbox" name="modifyTypes" value="color" checked> Colors
-            </label>
-          </div>
-        </div>
-        <button type="submit" id="modifyBtn">
-          🚀 Transform with AI
-        </button>
-      </form>
-      <div class="loading" id="loadingModify">
-        ⏳ Transforming design...
-        <div class="progress-container">
-          <div class="progress-bar" id="progressBarModify"></div>
-        </div>
-        <div class="progress-text" id="progressTextModify"></div>
-      </div>
-      <div id="resultModify"></div>
-    </div>
 
     <button id="closeBtn" class="secondary">❌ Close Assistant</button>
   </div>
@@ -556,6 +636,7 @@ export default function initUI(rootNode: HTMLElement): void {
 
   console.log('🚀 Figma AI Assistant UI loaded');
 
+  initSettingsToggle();
   initImageGeneration();
   initImageEditing();
   initAnalyze();
@@ -607,6 +688,24 @@ function saveSettings(): void {
 function loadSettings(): void {
   postPluginMessage({ type: 'load-settings' });
   console.log('📥 Loading settings...');
+}
+
+function initSettingsToggle(): void {
+  const settingsHeader = getElement<HTMLDivElement>('settingsHeader');
+  const settingsContent = getElement<HTMLDivElement>('settingsContent');
+  const settingsToggle = settingsHeader.querySelector('.settings-toggle') as HTMLDivElement;
+
+  settingsHeader.addEventListener('click', () => {
+    const isExpanded = settingsContent.classList.contains('expanded');
+    
+    if (isExpanded) {
+      settingsContent.classList.remove('expanded');
+      settingsToggle.classList.remove('expanded');
+    } else {
+      settingsContent.classList.add('expanded');
+      settingsToggle.classList.add('expanded');
+    }
+  });
 }
 
 function initImageGeneration(): void {
@@ -676,6 +775,8 @@ function initImageGeneration(): void {
 
 function initAnalyze(): void {
   const analyzeBtn = getElement<HTMLButtonElement>('analyzeBtn');
+  const copyJsonBtn = getElement<HTMLButtonElement>('copyJsonBtn');
+  const closeJsonBtn = getElement<HTMLButtonElement>('closeJsonBtn');
 
   analyzeBtn.addEventListener('click', () => {
     console.log('📊 Starting design analysis...');
@@ -683,8 +784,61 @@ function initAnalyze(): void {
     analyzeBtn.disabled = true;
     analyzeBtn.textContent = '⏳ Analyzing...';
     getElement<HTMLDivElement>('jsonOutput').style.display = 'none';
+    getElement<HTMLDivElement>('jsonActions').style.display = 'none';
 
     postPluginMessage({ type: 'analyze-design-only' });
+  });
+
+  copyJsonBtn.addEventListener('click', () => {
+    const jsonOutput = getElement<HTMLDivElement>('jsonOutput');
+    const preElement = jsonOutput.querySelector('pre');
+    
+    if (preElement) {
+      const textToCopy = preElement.textContent || '';
+      
+      // Copy to clipboard using the Clipboard API
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy)
+          .then(() => {
+            const originalText = copyJsonBtn.textContent;
+            copyJsonBtn.textContent = '✅ Copied!';
+            setTimeout(() => {
+              copyJsonBtn.textContent = originalText;
+            }, 2000);
+          })
+          .catch((err) => {
+            console.error('Failed to copy:', err);
+            alert('Failed to copy to clipboard');
+          });
+      } else {
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        
+        try {
+          document.execCommand('copy');
+          const originalText = copyJsonBtn.textContent;
+          copyJsonBtn.textContent = '✅ Copied!';
+          setTimeout(() => {
+            copyJsonBtn.textContent = originalText;
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy:', err);
+          alert('Failed to copy to clipboard');
+        }
+        
+        document.body.removeChild(textarea);
+      }
+    }
+  });
+
+  closeJsonBtn.addEventListener('click', () => {
+    getElement<HTMLDivElement>('jsonOutput').style.display = 'none';
+    getElement<HTMLDivElement>('jsonActions').style.display = 'none';
   });
 }
 
@@ -861,7 +1015,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       analyzeBtn.textContent = '📊 Analyze Design (Show JSON)';
       const jsonOutput = getElement<HTMLDivElement>('jsonOutput');
       jsonOutput.innerHTML = `
-        <strong>📊 Design Analysis JSON (sent to AI):</strong><br>
+        <strong>📊 Design Analysis JSON:</strong><br>
         <pre style="white-space: pre-wrap; word-break: break-all; margin-top: 8px;">${JSON.stringify(
           msg.analysisData,
           null,
@@ -869,6 +1023,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
         )}</pre>
       `;
       jsonOutput.style.display = 'block';
+      getElement<HTMLDivElement>('jsonActions').style.display = 'flex';
       break;
     }
 
@@ -879,27 +1034,52 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
 
     case 'analysis-complete': {
       const resultDiv = getElement<HTMLDivElement>('resultModify');
+      const jsonDiv = document.createElement('div');
+      jsonDiv.className = 'json-output minimized';
+      jsonDiv.innerHTML = `
+        <strong>🧠 Design Analysis (JSON):</strong><br>
+        <pre style="white-space: pre-wrap; word-break: break-all; margin-top: 8px;">${JSON.stringify(msg.structuredData, null, 2)}</pre>
+      `;
+      
+      // Click to expand
+      jsonDiv.addEventListener('click', function expandJson() {
+        this.classList.remove('minimized');
+        this.style.cursor = 'default';
+        this.removeEventListener('click', expandJson);
+      });
+      
       resultDiv.innerHTML = `
         <div class="result success">
-          <strong>🧠 Design Analysis (JSON):</strong><br>
-          <div class="json-output" style="margin-top: 8px; display: block;">
-            ${JSON.stringify(msg.structuredData, null, 2)}
-          </div>
+          <strong>🧠 Design Analysis</strong>
         </div>
       `;
+      resultDiv.appendChild(jsonDiv);
       break;
     }
 
     case 'ai-modifications-received': {
       const resultDiv = getElement<HTMLDivElement>('resultModify');
+      const jsonDiv = document.createElement('div');
+      jsonDiv.className = 'json-output minimized';
+      jsonDiv.style.marginTop = '16px';
+      jsonDiv.innerHTML = `
+        <strong>🤖 AI Modifications:</strong><br>
+        <pre style="white-space: pre-wrap; word-break: break-all; margin-top: 8px;">${JSON.stringify(msg.modifications, null, 2)}</pre>
+      `;
+      
+      // Click to expand
+      jsonDiv.addEventListener('click', function expandJson() {
+        this.classList.remove('minimized');
+        this.style.cursor = 'default';
+        this.removeEventListener('click', expandJson);
+      });
+      
       resultDiv.innerHTML += `
         <div class="result success" style="margin-top: 16px;">
-          <strong>🤖 AI Modifications:</strong><br>
-          <div class="json-output" style="margin-top: 8px;">
-            ${JSON.stringify(msg.modifications, null, 2)}
-          </div>
+          <strong>🤖 AI Modifications Received</strong>
         </div>
       `;
+      resultDiv.appendChild(jsonDiv);
       break;
     }
 

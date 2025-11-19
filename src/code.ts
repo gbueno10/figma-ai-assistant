@@ -5,7 +5,7 @@ import { showUI } from '@create-figma-plugin/utilities';
 import { AIDesignAssistant } from './aiDesignAssistant';
 import { DesignModificationHandler } from './handlers/designModificationHandler';
 import { DEFAULT_BACKEND_BASE_URL } from './config';
-import { setBackendBaseUrl } from './services/backendClient';
+import { setBackendBaseUrl, getBackendBaseUrl } from './services/backendClient';
 import { NamingUtils } from './utils/namingConvention';
 
 const API_KEY_STORAGE_KEY = 'figma-ai-assistant-api-key';
@@ -184,6 +184,92 @@ function initializeUiMessageHandler() {
     } else if (msg.type === 'edit-frame-images') {
       console.log('🖼️ Starting frame image editing directly...');
       await executeFrameImageEditing(msg);
+      
+    } else if (msg.type === 'check-drive-tokens') {
+      // Check if tokens exist in clientStorage
+      const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
+      const folderId = await figma.clientStorage.getAsync('google_drive_folder_id');
+      
+      figma.ui.postMessage({
+        type: 'drive-tokens-status',
+        hasTokens: !!tokens,
+        folderId: folderId || ''
+      });
+      
+    } else if (msg.type === 'get-drive-auth-url') {
+      // Fetch auth URL from backend
+      const requestId = msg.requestId;
+      const backendUrl = getBackendBaseUrl();
+      
+      try {
+        const response = await fetch(`${backendUrl}/drive/auth-url?requestId=${requestId}`);
+        const data = await response.json();
+        
+        if (data.authUrl) {
+          figma.ui.postMessage({
+            type: 'auth-url-ready',
+            url: data.authUrl,
+            requestId: requestId
+          });
+        } else {
+          throw new Error('No auth URL received');
+        }
+      } catch (error) {
+        console.error('Error getting auth URL:', error);
+        figma.ui.postMessage({
+          type: 'auth-status-error',
+          message: error instanceof Error ? error.message : 'Failed to get auth URL'
+        });
+      }
+      
+    } else if (msg.type === 'check-drive-auth-status') {
+      // Poll backend for auth status
+      const requestId = msg.requestId;
+      const backendUrl = getBackendBaseUrl();
+      
+      try {
+        const response = await fetch(`${backendUrl}/drive/check-status?requestId=${requestId}`);
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.tokens) {
+          figma.ui.postMessage({
+            type: 'auth-status-success',
+            tokens: data.tokens
+          });
+        } else if (data.status === 'error') {
+          figma.ui.postMessage({
+            type: 'auth-status-error',
+            message: data.error || 'Authentication failed'
+          });
+        }
+        // If pending, UI will continue polling
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+        figma.ui.postMessage({
+          type: 'auth-status-error',
+          message: error instanceof Error ? error.message : 'Failed to check auth status'
+        });
+      }
+      
+    } else if (msg.type === 'save-drive-tokens') {
+      // Save tokens to clientStorage
+      await figma.clientStorage.setAsync('google_drive_tokens', msg.tokens);
+      console.log('✅ Tokens saved to clientStorage');
+      
+    } else if (msg.type === 'save-drive-folder-id') {
+      // Save folder ID to clientStorage
+      await figma.clientStorage.setAsync('google_drive_folder_id', msg.folderId);
+      console.log('✅ Folder ID saved to clientStorage');
+      
+    } else if (msg.type === 'clear-drive-tokens') {
+      // Clear tokens and folder ID from clientStorage
+      await figma.clientStorage.deleteAsync('google_drive_tokens');
+      await figma.clientStorage.deleteAsync('google_drive_folder_id');
+      console.log('✅ Drive tokens cleared');
+      
+    } else if (msg.type === 'export-to-drive') {
+      console.log('☁️ Starting bulk export to Google Drive...');
+      await handleExportToDrive(msg);
     }
   } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -891,4 +977,131 @@ async function handleFrameStretch(newHeight: number) {
   const successMsg = `✅ Novo frame criado: ${Math.round(oldWidth)}x${Math.round(newHeight)} [Stretch]`;
   figma.notify(successMsg, { timeout: 3000 });
   figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
+}
+
+/**
+ * Handle bulk export of selected frames to Google Drive
+ */
+async function handleExportToDrive(msg: any) {
+  try {
+    // Get tokens and folderId from clientStorage
+    const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
+    const folderId = msg.folderId;
+    
+    if (!tokens) {
+      figma.notify('❌ Please connect your Google Drive first', { timeout: 3000 });
+      figma.ui.postMessage({
+        type: 'error',
+        message: 'Google Drive not connected. Please connect first.',
+        context: 'drive-export'
+      });
+      return;
+    }
+    
+    const selection = figma.currentPage.selection;
+    
+    if (selection.length === 0) {
+      figma.notify('❌ Please select at least one frame to export', { timeout: 3000 });
+      figma.ui.postMessage({
+        type: 'drive-export-complete',
+        successCount: 0,
+        errorCount: 0,
+        totalFrames: 0
+      });
+      return;
+    }
+    
+    const frames = selection.filter(node => node.type === 'FRAME') as FrameNode[];
+    
+    if (frames.length === 0) {
+      figma.notify('❌ Please select frames', { timeout: 3000 });
+      figma.ui.postMessage({
+        type: 'drive-export-complete',
+        successCount: 0,
+        errorCount: 0,
+        totalFrames: 0
+      });
+      return;
+    }
+    
+    console.log(`☁️ Exporting ${frames.length} frame(s) to Google Drive...`);
+    figma.notify(`📤 Exporting ${frames.length} frame(s)...`, { timeout: 2000 });
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (let i = 0; i < frames.length; i++) {
+      const frame = frames[i];
+      const frameName = frame.name;
+      
+      try {
+        const imageBytes = await frame.exportAsync({
+          format: 'PNG',
+          constraint: { type: 'SCALE', value: 1 }
+        });
+        
+        const frameData = Array.from(imageBytes);
+        
+        figma.ui.postMessage({
+          type: 'drive-export-frame',
+          frameData,
+          frameName,
+          tokens,
+          folderId,
+          currentIndex: i + 1,
+          totalFrames: frames.length
+        });
+        
+        await new Promise<void>((resolve) => {
+          const handler = (msg: any) => {
+            if (msg.type === 'drive-export-frame-complete' && msg.frameName === frameName) {
+              figma.ui.off('message', handler);
+              
+              if (msg.success) {
+                successCount++;
+                console.log(`✅ ${frameName} uploaded`);
+              } else {
+                errorCount++;
+                console.error(`❌ ${frameName} failed`);
+              }
+              resolve();
+            }
+          };
+          
+          figma.ui.on('message', handler);
+          
+          setTimeout(() => {
+            figma.ui.off('message', handler);
+            errorCount++;
+            resolve();
+          }, 30000);
+        });
+        
+      } catch (error) {
+        errorCount++;
+        console.error(`❌ Error exporting ${frameName}:`, error);
+      }
+    }
+    
+    figma.ui.postMessage({
+      type: 'drive-export-complete',
+      successCount,
+      errorCount,
+      totalFrames: frames.length
+    });
+    
+    const message = errorCount === 0
+      ? `✅ Exported ${successCount} frame(s)!`
+      : `⚠️ Exported ${successCount}/${frames.length} (${errorCount} failed)`;
+    
+    figma.notify(message, { timeout: 3000 });
+    
+  } catch (error) {
+    console.error('❌ Export error:', error);
+    figma.ui.postMessage({
+      type: 'error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      context: 'drive-export'
+    });
+  }
 }

@@ -3,6 +3,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors, { CorsOptions } from 'cors';
 import designRoutes from './routes/designRoutes';
 import imageRoutes from './routes/imageRoutes';
+import driveRoutes from './routes/driveRoutes';
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/design', designRoutes);
 app.use('/api/images', imageRoutes);
+app.use('/api/drive', driveRoutes);
 
 // Error handler
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

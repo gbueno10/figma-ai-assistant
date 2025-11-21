@@ -80,7 +80,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Autorização Bem-Sucedida!</title>
+          <title>Authorization Successful!</title>
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -127,10 +127,10 @@ router.get('/callback', async (req: Request, res: Response) => {
         <body>
           <div class="container">
             <div class="success-icon">✅</div>
-            <h1>Autorização Bem-Sucedida!</h1>
-            <p>Sua conta do Google Drive foi conectada com sucesso.</p>
+            <h1>Authorization Successful!</h1>
+            <p>Your Google Drive account has been successfully connected.</p>
             <div class="close-message">
-              Você pode fechar esta janela e voltar para o Figma.
+              You can close this window and return to Figma.
             </div>
           </div>
         </body>
@@ -153,7 +153,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Erro de Autorização</title>
+          <title>Authorization Error</title>
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -192,9 +192,9 @@ router.get('/callback', async (req: Request, res: Response) => {
         <body>
           <div class="container">
             <div class="error-icon">❌</div>
-            <h1>Erro na Autorização</h1>
-            <p>${error instanceof Error ? error.message : 'Erro desconhecido'}</p>
-            <p>Por favor, tente novamente ou contacte o suporte.</p>
+            <h1>Authorization Error</h1>
+            <p>${error instanceof Error ? error.message : 'Unknown error'}</p>
+            <p>Please try again or contact support.</p>
           </div>
         </body>
       </html>
@@ -243,11 +243,12 @@ router.get('/check-status', (req: Request, res: Response) => {
 /**
  * POST /api/drive/upload
  * Upload an image to Google Drive
- * Body: { tokens, folderId, fileName, imageBase64 }
+ * Body: { tokens, folderId, fileName, imageBase64, prompt?, apiKey? }
+ * If prompt is provided, generates an AI-powered filename
  */
 router.post('/upload', async (req: Request, res: Response) => {
   try {
-    let { tokens, folderId, fileName, imageBase64 } = req.body;
+    let { tokens, folderId, fileName, imageBase64, prompt, apiKey } = req.body;
 
     // Validation
     if (!tokens || !tokens.access_token) {
@@ -264,6 +265,20 @@ router.post('/upload', async (req: Request, res: Response) => {
 
     if (!imageBase64) {
       return res.status(400).json({ error: 'Missing imageBase64' });
+    }
+
+    // If prompt is provided, generate AI-powered filename
+    if (prompt && prompt.trim()) {
+      console.log('🤖 Generating AI filename for prompt:', prompt);
+      try {
+        const { generateDogFilename } = await import('../services/namingService');
+        const aiGeneratedName = await generateDogFilename(prompt, apiKey);
+        fileName = `${aiGeneratedName}.png`;
+        console.log('✅ AI generated filename:', fileName);
+      } catch (namingError) {
+        console.warn('⚠️ Failed to generate AI filename, using provided name:', namingError);
+        // Continue with original fileName if AI naming fails
+      }
     }
 
     // Convert base64 to Buffer
@@ -320,6 +335,7 @@ router.post('/upload', async (req: Request, res: Response) => {
       success: true,
       fileId: uploadResult.fileId,
       webViewLink: uploadResult.webViewLink,
+      fileName: fileName, // Return the actual filename used (may be AI-generated)
       message: `File "${fileName}" uploaded successfully`,
       refreshedTokens: refreshedTokens, // Send new tokens if refreshed
     });

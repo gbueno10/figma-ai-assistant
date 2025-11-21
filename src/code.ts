@@ -11,6 +11,8 @@ import { NamingUtils } from './utils/namingConvention';
 
 const API_KEY_STORAGE_KEY = 'figma-ai-assistant-api-key';
 const BACKEND_URL_STORAGE_KEY = 'figma-ai-assistant-backend-url';
+const EXPORTS_FOLDER_STORAGE_KEY = 'figma-ai-assistant-exports-folder';
+const IMAGE_BANK_FOLDER_STORAGE_KEY = 'figma-ai-assistant-image-bank-folder';
 
 let aiAssistant: AIDesignAssistant;
 
@@ -124,11 +126,15 @@ function initializeUiMessageHandler() {
         const storedBackendUrl =
           (await figma.clientStorage.getAsync(BACKEND_URL_STORAGE_KEY)) || DEFAULT_BACKEND_BASE_URL;
         const normalizedUrl = setBackendBaseUrl(storedBackendUrl);
+        const exportsFolder = (await figma.clientStorage.getAsync(EXPORTS_FOLDER_STORAGE_KEY)) || '';
+        const imageBankFolder = (await figma.clientStorage.getAsync(IMAGE_BANK_FOLDER_STORAGE_KEY)) || '';
 
         figma.ui.postMessage({
           type: 'settings-loaded',
           apiKey,
-          backendUrl: normalizedUrl
+          backendUrl: normalizedUrl,
+          exportsFolder,
+          imageBankFolder
         });
         
         console.log('✅ Settings loaded from storage');
@@ -143,6 +149,10 @@ function initializeUiMessageHandler() {
         const normalizedUrl = setBackendBaseUrl(msg.backendUrl);
         await figma.clientStorage.setAsync(BACKEND_URL_STORAGE_KEY, normalizedUrl);
         console.log(`✅ Backend URL saved: ${normalizedUrl}`);
+
+        await figma.clientStorage.setAsync(EXPORTS_FOLDER_STORAGE_KEY, msg.exportsFolder || '');
+        await figma.clientStorage.setAsync(IMAGE_BANK_FOLDER_STORAGE_KEY, msg.imageBankFolder || '');
+        console.log(`✅ Folders saved: Exports=${msg.exportsFolder || 'none'}, Image Bank=${msg.imageBankFolder || 'none'}`);
 
         console.log('✅ Settings saved to storage');
       } catch (error) {
@@ -279,6 +289,77 @@ function initializeUiMessageHandler() {
     } else if (msg.type === 'export-to-drive') {
       console.log('☁️ Starting bulk export to Google Drive...');
       await handleExportToDrive(msg);
+    
+    } else if (msg.type === 'auto-upload-to-drive') {
+      console.log('☁️ Starting auto-upload to Google Drive...');
+      const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
+      const imageBankFolder = await figma.clientStorage.getAsync(IMAGE_BANK_FOLDER_STORAGE_KEY);
+      const apiKey = await figma.clientStorage.getAsync(API_KEY_STORAGE_KEY);
+      
+      if (!tokens) {
+        figma.notify('⚠️ Google Drive not connected. Image generated but not saved to cloud.', { error: true });
+        figma.ui.postMessage({
+          type: 'auto-upload-error',
+          message: 'Google Drive not connected'
+        });
+        return;
+      }
+
+      if (!imageBankFolder) {
+        figma.notify('⚠️ Image Bank folder not configured. Check Settings.', { error: true });
+        figma.ui.postMessage({
+          type: 'auto-upload-error',
+          message: 'Image Bank folder not configured'
+        });
+        return;
+      }
+
+      const backendUrl = getBackendBaseUrl();
+
+      // Notificar inicio
+      figma.notify(`☁️ Uploading to Drive with AI naming...`);
+
+      try {
+        // Backend usa a MESMA imagem + AI naming + upload
+        const response = await fetch(`${backendUrl}/drive/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tokens,
+            folderId: imageBankFolder,
+            fileName: 'temp.png', // Fallback name (will be replaced by AI)
+            prompt: msg.prompt, // Backend will generate AI name from this
+            imageBase64: msg.imageBase64, // SAME image that was already generated
+            apiKey: apiKey || undefined
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          figma.notify(`✅ Saved to Drive: ${data.fileName}`);
+          figma.ui.postMessage({
+            type: 'auto-upload-success',
+            filename: data.fileName,
+            fileUrl: data.webViewLink
+          });
+          
+          // Se houve refresh de token, atualizar storage
+          if (data.refreshedTokens) {
+            await figma.clientStorage.setAsync('google_drive_tokens', data.refreshedTokens);
+          }
+        } else {
+          throw new Error(data.message || 'Upload failed');
+        }
+      } catch (err) {
+        console.error('Auto-upload error:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        figma.notify(`❌ Failed to save to Drive: ${errorMessage}`, { error: true });
+        figma.ui.postMessage({
+          type: 'auto-upload-error',
+          message: errorMessage
+        });
+      }
     }
   } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -483,6 +564,9 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       
       const imageBytes = await ImageGenerationService.generateImageAsBase64(msg.prompt, msg.apiKey, msg.size);
       
+      // Convert Uint8Array to base64 using Figma's built-in function
+      const imageBase64 = figma.base64Encode(imageBytes);
+      
       figma.ui.postMessage({
         type: 'image-progress',
         message: 'Creating image in Figma...',
@@ -497,7 +581,9 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       
       figma.ui.postMessage({
         type: 'image-complete',
-        message: 'New image created successfully!'
+        message: 'New image created successfully!',
+        prompt: msg.prompt,
+        imageBase64: imageBase64 // Send base64 for auto-save
       });
       
       figma.notify('✅ New AI image created!', { timeout: 3000 });

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { analyzeDesign, requestDesignModifications } from '../services/designService';
+import { generateDogFilename } from '../services/namingService';
 
 const router = Router();
 
@@ -77,6 +78,28 @@ router.post('/modifications', async (req, res, next) => {
     res.json(result);
   } catch (error) {
     console.error('[Design][modifications] Failed', error);
+    next(error);
+  }
+});
+
+router.post('/generate-filename', async (req, res, next) => {
+  try {
+    const { prompt, apiKey } = req.body;
+
+    console.log('[Design][generate-filename] Incoming request', {
+      promptLength: typeof prompt === 'string' ? prompt.length : 'invalid',
+      providedApiKey: Boolean(apiKey),
+    });
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt required' });
+    }
+
+    const filename = await generateDogFilename(prompt, apiKey);
+    console.log('[Design][generate-filename] Generated filename:', filename);
+    res.json({ filename });
+  } catch (error) {
+    console.error('[Design][generate-filename] Failed', error);
     next(error);
   }
 });

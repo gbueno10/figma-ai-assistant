@@ -233,6 +233,7 @@ export class ImageGenerationHandler {
       );
 
       // Success notification
+      console.log(`📨 Sending image-generation-complete with imageUrl:`, imageUrl ? `${imageUrl.substring(0, 50)}...` : 'null');
       figma.ui.postMessage({
         type: 'image-generation-complete',
         imageUrl: imageUrl

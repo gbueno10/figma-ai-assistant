@@ -489,6 +489,43 @@ const template = `
             🌐 Defaults to the local Docker container
           </div>
         </div>
+
+        <!-- Google Drive Configuration -->
+        <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+          <label style="font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <span id="driveStatusIcon">⚠️</span>
+            <span>Google Drive Configuration</span>
+          </label>
+          <div id="driveStatusMessage" style="font-size: 12px; color: #64748b; margin-bottom: 12px; padding: 8px; background: #f8fafc; border-radius: 6px;">
+            ⚠️ Not connected. <a href="#" id="scrollToDriveSetup" style="color: #667eea; text-decoration: underline;">Connect below</a>
+          </div>
+          
+          <!-- Connect/Disconnect buttons in Settings -->
+          <div style="margin-bottom: 16px;">
+            <button id="settingsConnectDriveBtn" type="button" class="secondary" style="display: none;">
+              🔗 Connect Google Drive
+            </button>
+            <button id="settingsDisconnectDriveBtn" type="button" class="secondary" style="display: none;">
+              🔌 Disconnect Drive
+            </button>
+          </div>
+          
+          <div class="form-group">
+            <label for="exportsFolder">📤 Exports Folder ID:</label>
+            <input type="text" id="exportsFolder" placeholder="Google Drive folder ID for frame exports" />
+            <div class="api-key-info">
+              📁 Paste the folder ID from your Google Drive URL
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="imageBankFolder">🖼️ Image Bank Folder ID:</label>
+            <input type="text" id="imageBankFolder" placeholder="Google Drive folder ID for AI-generated images" />
+            <div class="api-key-info">
+              🎨 Auto-save generated images to this folder
+            </div>
+          </div>
+        </div>
         
         <button id="analyzeBtn" class="secondary" style="margin-top: 12px;">
           📊 Analyze Design (Show JSON)
@@ -566,6 +603,15 @@ const template = `
       </div>
       <div class="card-description">
         Generate new images or regenerate selected images using AI. Select one or more images to regenerate, or create new ones.
+      </div>
+      <div class="form-group" style="margin-top: 12px; background: #f0fdf4; padding: 12px; border-radius: 6px; border: 1px solid #bbf7d0;">
+        <label class="checkbox-option" style="margin-bottom: 8px;">
+          <input type="checkbox" id="autoSaveDrive" checked> 
+          💾 Auto-save to Google Drive (Image Bank)
+        </label>
+        <div id="driveStatusIndicator" style="font-size: 11px; color: #64748b; margin-top: 8px; padding-top: 8px; border-top: 1px solid #bbf7d0;">
+          <div id="driveConnectionStatus">⚠️ Drive not configured. <a href="#" id="scrollToDriveConfig" style="color: #059669; text-decoration: underline; cursor: pointer;">Configure now</a></div>
+        </div>
       </div>
       <div class="quick-actions">
         <button id="generateNewBtn" type="button">
@@ -698,15 +744,11 @@ const template = `
 
     <!-- State 3: Connected -->
     <div id="driveStateConnected" style="display: none;">
-      <div class="form-group">
-        <label for="driveFolderId">Export Folder ID:</label>
-        <input type="text" id="driveFolderId" placeholder="Paste the Google Drive folder ID" />
-        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-          💡 Tip: Open the folder in Drive and copy the ID from the URL
-        </div>
+      <div style="font-size: 13px; color: #059669; background: #f0fdf4; padding: 12px; border-radius: 6px; margin-bottom: 16px; border: 1px solid #bbf7d0;">
+        ✅ <strong>Connected!</strong> Folders configured in Settings will be used automatically.
       </div>
 
-      <button id="exportToDriveBtn" type="button" disabled>
+      <button id="exportToDriveBtn" type="button">
         📤 Export Selected Frames
       </button>
       
@@ -789,14 +831,18 @@ function postPluginMessage(message: PluginToUiMessage): void {
 function saveSettings(): void {
   const apiKey = getElement<HTMLInputElement>('apiKey').value.trim();
   const backendUrl = getElement<HTMLInputElement>('backendUrl').value.trim();
+  const exportsFolder = getElement<HTMLInputElement>('exportsFolder').value.trim();
+  const imageBankFolder = getElement<HTMLInputElement>('imageBankFolder').value.trim();
 
   postPluginMessage({
     type: 'save-settings',
     apiKey,
-    backendUrl
+    backendUrl,
+    exportsFolder,
+    imageBankFolder
   });
 
-  console.log(`📤 Saving settings... Backend: ${backendUrl || 'default'}`);
+  console.log(`📤 Saving settings... Backend: ${backendUrl || 'default'}, Exports: ${exportsFolder || 'none'}, Image Bank: ${imageBankFolder || 'none'}`);
 }
 
 function loadSettings(): void {
@@ -820,6 +866,27 @@ function initSettingsToggle(): void {
       settingsToggle.classList.add('expanded');
     }
   });
+
+  // Connect/Disconnect buttons in Settings
+  const settingsConnectBtn = getElement<HTMLButtonElement>('settingsConnectDriveBtn');
+  const settingsDisconnectBtn = getElement<HTMLButtonElement>('settingsDisconnectDriveBtn');
+
+  settingsConnectBtn.addEventListener('click', () => {
+    // Scroll to Drive card and trigger connection
+    scrollToDriveCard();
+    // Trigger the connect button click
+    setTimeout(() => {
+      const connectBtn = document.getElementById('connectDriveBtn') as HTMLButtonElement;
+      if (connectBtn) connectBtn.click();
+    }, 300);
+  });
+
+  settingsDisconnectBtn.addEventListener('click', () => {
+    if (confirm('Disconnect from Google Drive? Your folder settings will be preserved.')) {
+      postPluginMessage({ type: 'clear-drive-tokens' });
+      // Update UI will be handled by the drive-tokens-status message
+    }
+  });
 }
 
 function initImageGeneration(): void {
@@ -830,6 +897,15 @@ function initImageGeneration(): void {
   const generateBtn = getElement<HTMLButtonElement>('generateBtn');
   const imagePrompt = getElement<HTMLTextAreaElement>('imagePrompt');
   const imageSize = getElement<HTMLSelectElement>('imageSize');
+  
+  // Scroll to Drive config
+  const scrollToDriveLink = document.getElementById('scrollToDriveConfig');
+  if (scrollToDriveLink) {
+    scrollToDriveLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      scrollToDriveCard();
+    });
+  }
 
   generateNewBtn.addEventListener('click', () => {
     console.log('✨ Starting new image generation...');
@@ -1034,7 +1110,6 @@ function initExportToDrive(): void {
   const disconnectDriveBtn = getElement<HTMLButtonElement>('disconnectDriveBtn');
   const retryConnectBtn = getElement<HTMLButtonElement>('retryConnectBtn');
   const exportToDriveBtn = getElement<HTMLButtonElement>('exportToDriveBtn');
-  const driveFolderId = getElement<HTMLInputElement>('driveFolderId');
   const driveExportStatus = getElement<HTMLDivElement>('driveExportStatus');
   const driveErrorMessage = getElement<HTMLDivElement>('driveErrorMessage');
   const authUrlInput = getElement<HTMLInputElement>('authUrlInput');
@@ -1074,17 +1149,15 @@ function initExportToDrive(): void {
   function showConnectedState(userEmail?: string): void {
     driveCardTitle.textContent = '✅ Google Drive Connected';
     driveCardDescription.textContent = userEmail 
-      ? `Authenticated as ${userEmail}. Tokens saved locally.`
-      : 'Successfully authenticated. Tokens saved locally.';
+      ? `Authenticated as ${userEmail}. Configure folders in Settings.`
+      : 'Successfully authenticated. Configure folders in Settings.';
     stateDisconnected.style.display = 'none';
     stateConnecting.style.display = 'none';
     stateConnected.style.display = 'block';
     stateError.style.display = 'none';
     
-    // Enable export button if folder ID exists
-    if (driveFolderId.value.trim()) {
-      exportToDriveBtn.disabled = false;
-    }
+    // Export button is always enabled when connected
+    exportToDriveBtn.disabled = false;
   }
   
   // Show State 4: Error
@@ -1194,33 +1267,19 @@ function initExportToDrive(): void {
   disconnectDriveBtn.addEventListener('click', () => {
     console.log('🔌 Disconnecting from Google Drive...');
     postPluginMessage({ type: 'clear-drive-tokens' });
-    driveFolderId.value = '';
     showDisconnectedState();
-  });
-  
-  // Enable/disable export button when folder ID changes
-  driveFolderId.addEventListener('input', () => {
-    const hasValue = driveFolderId.value.trim().length > 0;
-    exportToDriveBtn.disabled = !hasValue;
-    
-    // Save folder ID
-    if (hasValue) {
-      postPluginMessage({
-        type: 'save-drive-folder-id',
-        folderId: driveFolderId.value.trim()
-      });
-    }
   });
   
   // Export to Drive button
   exportToDriveBtn.addEventListener('click', () => {
-    const folderIdValue = driveFolderId.value.trim();
+    // Get exports folder from settings
+    const exportsFolderSetting = getElement<HTMLInputElement>('exportsFolder').value.trim();
     
-    if (!folderIdValue) {
+    if (!exportsFolderSetting) {
       driveExportStatus.style.display = 'block';
       driveExportStatus.style.background = '#fee2e2';
       driveExportStatus.style.color = '#991b1b';
-      driveExportStatus.innerHTML = '❌ Please provide a folder ID';
+      driveExportStatus.innerHTML = '❌ Please configure Exports Folder in Settings first';
       return;
     }
     
@@ -1229,12 +1288,12 @@ function initExportToDrive(): void {
     driveExportStatus.style.display = 'block';
     driveExportStatus.style.background = '#dbeafe';
     driveExportStatus.style.color = '#1e40af';
-    driveExportStatus.innerHTML = '⏳ Starting export...';
+    driveExportStatus.innerHTML = '⏳ Exporting to configured Exports folder...';
     
     // Request frame exports from plugin
     postPluginMessage({
       type: 'export-to-drive',
-      folderId: folderIdValue
+      folderId: exportsFolderSetting
     });
   });
   
@@ -1249,10 +1308,6 @@ function initExportToDrive(): void {
     showErrorState,
     stopPolling,
     startPolling,
-    setFolderId: (id: string) => {
-      driveFolderId.value = id;
-      if (id) exportToDriveBtn.disabled = false;
-    },
     enableExportButton: () => {
       exportToDriveBtn.disabled = false;
     },
@@ -1381,13 +1436,20 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
     case 'settings-loaded': {
       const apiKeyInput = getElement<HTMLInputElement>('apiKey');
       const backendUrlInput = getElement<HTMLInputElement>('backendUrl');
+      const exportsFolderInput = getElement<HTMLInputElement>('exportsFolder');
+      const imageBankFolderInput = getElement<HTMLInputElement>('imageBankFolder');
+      
       apiKeyInput.value = (msg.apiKey as string) || '';
       backendUrlInput.value = (msg.backendUrl as string) || 'http://localhost:3000/api';
+      exportsFolderInput.value = (msg.exportsFolder as string) || '';
+      imageBankFolderInput.value = (msg.imageBankFolder as string) || '';
 
       console.log(
         apiKeyInput.value ? '✅ API key loaded' : 'ℹ️ API key not set (using backend configuration)'
       );
       console.log(`✅ Backend URL loaded: ${backendUrlInput.value}`);
+      console.log(`✅ Exports Folder: ${exportsFolderInput.value || 'not set'}`);
+      console.log(`✅ Image Bank Folder: ${imageBankFolderInput.value || 'not set'}`);
       break;
     }
 
@@ -1500,6 +1562,51 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       break;
     }
 
+    case 'image-generation-complete': {
+      // Handler para a mensagem do imageGenerationHandler
+      getElement<HTMLDivElement>('loadingImage').style.display = 'none';
+      getElement<HTMLButtonElement>('generateBtn').disabled = false;
+      const resultDiv = getElement<HTMLDivElement>('resultImage');
+      resultDiv.innerHTML = `
+        <div class="result success">
+          ✅ New image created successfully!
+        </div>
+      `;
+      
+      // Auto-save to Drive logic
+      const autoSaveCheckbox = document.getElementById('autoSaveDrive') as HTMLInputElement;
+      const shouldAutoSave = autoSaveCheckbox && autoSaveCheckbox.checked;
+      
+      console.log('🔍 Auto-save check:', {
+        shouldAutoSave,
+        hasImageUrl: !!msg.imageUrl,
+        imageUrlType: typeof msg.imageUrl
+      });
+      
+      if (shouldAutoSave && msg.imageUrl) {
+        const promptUsed = (document.getElementById('imagePrompt') as HTMLTextAreaElement).value;
+        const imageBase64 = (msg.imageUrl as string).split(',')[1]; // Remove o header data:image...
+        
+        console.log('📤 Triggering auto-save:', {
+          promptLength: promptUsed?.length,
+          hasBase64: !!imageBase64,
+          base64Length: imageBase64?.length
+        });
+        
+        if (promptUsed && imageBase64) {
+          triggerAutoSaveToDrive(promptUsed, imageBase64);
+        } else {
+          console.warn('⚠️ Auto-save skipped: missing prompt or base64');
+        }
+      } else {
+        console.log('ℹ️ Auto-save not triggered:', shouldAutoSave ? 'No imageUrl' : 'Checkbox not checked');
+      }
+      
+      getElement<HTMLFormElement>('imageForm').style.display = 'none';
+      console.log('✅ Image generation completed');
+      break;
+    }
+
     case 'image-complete': {
       getElement<HTMLDivElement>('loadingImage').style.display = 'none';
       getElement<HTMLButtonElement>('generateBtn').disabled = false;
@@ -1509,6 +1616,32 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
           ✅ ${(msg.message as string) || 'Image generated successfully!'}
         </div>
       `;
+      
+      // Auto-save to Drive logic
+      const autoSaveCheckbox = document.getElementById('autoSaveDrive') as HTMLInputElement;
+      const shouldAutoSave = autoSaveCheckbox && autoSaveCheckbox.checked;
+      
+      console.log('🔍 [image-complete] Auto-save check:', {
+        shouldAutoSave,
+        hasPrompt: !!msg.prompt,
+        hasImageBase64: !!msg.imageBase64,
+        messageKeys: Object.keys(msg)
+      });
+      
+      if (shouldAutoSave && msg.prompt && msg.imageBase64) {
+        const promptUsed = msg.prompt as string;
+        const imageBase64 = msg.imageBase64 as string;
+        
+        console.log('📤 [image-complete] Triggering auto-save with existing image');
+        
+        // Enviar MESMA imagem (já gerada) para o Drive com AI naming
+        triggerAutoSaveToDrive(promptUsed, imageBase64);
+      } else {
+        console.log('ℹ️ [image-complete] Auto-save not triggered:', 
+          !shouldAutoSave ? 'Checkbox not checked' : 
+          !msg.prompt ? 'No prompt' : 'No imageBase64');
+      }
+      
       getElement<HTMLFormElement>('imageForm').style.display = 'none';
       console.log('✅ Image generation completed');
       break;
@@ -1560,6 +1693,9 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       const hasTokens = Boolean(msg.hasTokens);
       const folderId = msg.folderId as string;
       const driveUI = (window as any).driveUI;
+      
+      // Update Drive status indicator in Image Generation card
+      updateDriveStatusIndicator(hasTokens, folderId);
       
       if (hasTokens) {
         driveUI.showConnectedState();
@@ -1746,8 +1882,124 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       break;
     }
 
+    case 'auto-upload-success': {
+      const resultDiv = getElement<HTMLDivElement>('resultImage');
+      const filename = typeof msg.filename === 'string' ? msg.filename : 'image';
+      const fileUrl = typeof msg.fileUrl === 'string' ? msg.fileUrl : '';
+      
+      const linkHtml = fileUrl 
+        ? `<a href="${fileUrl}" target="_blank" style="color: #1e40af; text-decoration: underline;">Open in Drive</a>`
+        : '';
+      
+      resultDiv.innerHTML += `
+        <div class="result success" style="margin-top:8px;">
+          ✅ Saved to Drive: <b>${filename}</b> ${linkHtml}
+        </div>
+      `;
+      break;
+    }
+
+    case 'auto-upload-error': {
+      const resultDiv = getElement<HTMLDivElement>('resultImage');
+      const errorMessage = typeof msg.message === 'string' ? msg.message : 'Unknown error';
+      resultDiv.innerHTML += `
+        <div class="result error" style="margin-top:8px;">
+          ❌ Failed to save to Drive: ${errorMessage}
+        </div>
+      `;
+      break;
+    }
+
     default:
       break;
+  }
+}
+
+function updateDriveStatusIndicator(hasTokens: boolean, folderId?: string): void {
+  // Update status in Image Generation card
+  const statusDiv = document.getElementById('driveConnectionStatus');
+  if (statusDiv) {
+    if (hasTokens && folderId) {
+      statusDiv.innerHTML = '✅ Drive connected. Folder configured.';
+      statusDiv.style.color = '#059669';
+    } else if (hasTokens && !folderId) {
+      statusDiv.innerHTML = '⚠️ Drive connected but no folder set. <a href="#" id="scrollToDriveConfig" style="color: #059669; text-decoration: underline; cursor: pointer;">Set folder</a>';
+      statusDiv.style.color = '#d97706';
+      // Re-attach scroll listener
+      const scrollLink = document.getElementById('scrollToDriveConfig');
+      if (scrollLink) {
+        scrollLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          scrollToDriveCard();
+        });
+      }
+    } else {
+      statusDiv.innerHTML = '⚠️ Drive not configured. <a href="#" id="scrollToDriveConfig" style="color: #059669; text-decoration: underline; cursor: pointer;">Configure now</a>';
+      statusDiv.style.color = '#64748b';
+      // Re-attach scroll listener
+      const scrollLink = document.getElementById('scrollToDriveConfig');
+      if (scrollLink) {
+        scrollLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          scrollToDriveCard();
+        });
+      }
+    }
+  }
+
+  // Update status in Settings section
+  const statusIcon = document.getElementById('driveStatusIcon');
+  const statusMessage = document.getElementById('driveStatusMessage');
+  const settingsConnectBtn = document.getElementById('settingsConnectDriveBtn') as HTMLButtonElement;
+  const settingsDisconnectBtn = document.getElementById('settingsDisconnectDriveBtn') as HTMLButtonElement;
+  
+  if (statusIcon && statusMessage) {
+    if (hasTokens) {
+      // Connected state
+      statusIcon.textContent = '✅';
+      statusMessage.innerHTML = '✅ Connected and ready';
+      statusMessage.style.color = '#059669';
+      statusMessage.style.background = '#f0fdf4';
+      statusMessage.style.borderColor = '#bbf7d0';
+      
+      // Show disconnect, hide connect
+      if (settingsConnectBtn) settingsConnectBtn.style.display = 'none';
+      if (settingsDisconnectBtn) settingsDisconnectBtn.style.display = 'inline-block';
+    } else {
+      // Disconnected state
+      statusIcon.textContent = '⚠️';
+      statusMessage.innerHTML = '⚠️ Not connected. <a href="#" id="scrollToDriveSetup" style="color: #667eea; text-decoration: underline;">Connect below</a>';
+      statusMessage.style.color = '#64748b';
+      statusMessage.style.background = '#f8fafc';
+      statusMessage.style.borderColor = '#e2e8f0';
+      
+      const scrollLink = document.getElementById('scrollToDriveSetup');
+      if (scrollLink) {
+        scrollLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          scrollToDriveCard();
+        });
+      }
+      
+      // Show connect, hide disconnect
+      if (settingsConnectBtn) settingsConnectBtn.style.display = 'inline-block';
+      if (settingsDisconnectBtn) settingsDisconnectBtn.style.display = 'none';
+    }
+  }
+}
+
+function scrollToDriveCard(): void {
+  // Find the Drive card by looking for the unique ID
+  const driveCard = document.querySelector('#driveStateDisconnected')?.closest('.ai-card') as HTMLElement;
+  if (driveCard) {
+    driveCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Flash effect
+    const originalBoxShadow = driveCard.style.boxShadow;
+    driveCard.style.boxShadow = '0 0 20px rgba(102, 126, 234, 0.5)';
+    driveCard.style.transition = 'box-shadow 0.3s ease';
+    setTimeout(() => {
+      driveCard.style.boxShadow = originalBoxShadow;
+    }, 2000);
   }
 }
 
@@ -1776,6 +2028,27 @@ function showResult(message: string, type: 'success' | 'error', containerId: str
   const resultDiv = getElement<HTMLDivElement>(containerId);
   resultDiv.innerHTML = message.replace(/\n/g, '<br>');
   resultDiv.className = `result ${type}`;
+}
+
+async function triggerAutoSaveToDrive(prompt: string, imageBase64: string): Promise<void> {
+  try {
+    // Atualizar UI
+    const resultDiv = document.getElementById('resultImage') as HTMLDivElement;
+    resultDiv.innerHTML += `<div class="result" style="margin-top:8px; background:#eff6ff; color:#1e40af; border: 1px solid #bfdbfe;">☁️ Saving to Drive with AI naming...</div>`;
+
+    // Enviar para o Plugin que vai chamar o backend
+    // O backend faz: AI naming + upload tudo junto!
+    postPluginMessage({
+      type: 'auto-upload-to-drive',
+      prompt,
+      imageBase64
+    });
+
+  } catch (error) {
+    console.error('Auto-save failed:', error);
+    const resultDiv = document.getElementById('resultImage') as HTMLDivElement;
+    resultDiv.innerHTML += `<div class="result error" style="margin-top:8px;">❌ Auto-save failed: ${error instanceof Error ? error.message : 'Unknown error'}</div>`;
+  }
 }
 
 function escapeHtml(value: unknown): string {

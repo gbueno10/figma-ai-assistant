@@ -544,6 +544,24 @@ const template = `
 
     <div class="ai-card">
       <div class="card-title">
+        🔀 Frame Iterator
+      </div>
+      <div class="card-description">
+        Automatically generate layout variations by shuffling elements or creating spotlight versions.
+      </div>
+      <div class="quick-actions">
+        <button id="shuffleElementsBtn" type="button">
+          🔀 Shuffle Position
+        </button>
+        <button id="spotlightBtn" type="button">
+          👑 Spotlight Variations
+        </button>
+      </div>
+      <div id="resultIterator"></div>
+    </div>
+
+    <div class="ai-card">
+      <div class="card-title">
         🎨 AI Image Generation
       </div>
       <div class="card-description">
@@ -633,81 +651,81 @@ const template = `
 
   <div class="ai-card">
     <div class="card-title" id="driveCardTitle">
-      ☁️ Conectar Google Drive
+      ☁️ Connect Google Drive
     </div>
     <div class="card-description" id="driveCardDescription">
-      Conecte sua conta para exportar frames diretamente para o Drive.
+      Connect your account to export frames directly to Drive.
     </div>
     
-    <!-- Estado 1: Não Conectado -->
+    <!-- State 1: Disconnected -->
     <div id="driveStateDisconnected" style="display: none;">
       <button id="connectDriveBtn" type="button">
-        🔗 Conectar Google Drive
+        🔗 Connect Google Drive
       </button>
     </div>
 
-    <!-- Estado 2: Conectando (Polling Ativo) -->
+    <!-- State 2: Connecting (Active Polling) -->
     <div id="driveStateConnecting" style="display: none;">
       <div class="loading" style="display: block;">
-        <div style="margin-bottom: 12px;">🔄 Aguardando autorização...</div>
+        <div style="margin-bottom: 12px;">🔄 Waiting for authorization...</div>
         <div class="spinner"></div>
         
         <div style="margin-top: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
           <div style="font-size: 12px; font-weight: 600; color: #1e293b; margin-bottom: 8px;">
-            📋 Copie e cole esta URL no seu navegador:
+            📋 Copy and paste this URL in your browser:
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
             <input type="text" id="authUrlInput" readonly 
                    style="flex: 1; font-size: 11px; padding: 8px; background: white; cursor: text; font-family: monospace;" />
             <button id="copyAuthUrlBtn" type="button" class="secondary" 
                     style="padding: 8px 12px; margin: 0; width: auto; font-size: 12px;">
-              📋 Copiar
+              📋 Copy
             </button>
           </div>
           <div style="font-size: 11px; color: #64748b; margin-top: 8px;">
-            💡 Após autorizar, esta janela detectará automaticamente.
+            💡 After authorizing, this window will detect it automatically.
           </div>
         </div>
         
         <p style="margin-top: 12px; font-size: 13px; color: #64748b; text-align: center;">
-          Não feche esta janela do Figma enquanto autoriza.
+          Don't close this Figma window while authorizing.
         </p>
       </div>
       <button id="cancelConnectBtn" type="button" class="secondary" style="margin-top: 12px;">
-        ❌ Cancelar
+        ❌ Cancel
       </button>
     </div>
 
-    <!-- Estado 3: Conectado -->
+    <!-- State 3: Connected -->
     <div id="driveStateConnected" style="display: none;">
       <div class="form-group">
-        <label for="driveFolderId">ID da Pasta de Exportação:</label>
-        <input type="text" id="driveFolderId" placeholder="Cole o ID da pasta do Google Drive" />
+        <label for="driveFolderId">Export Folder ID:</label>
+        <input type="text" id="driveFolderId" placeholder="Paste the Google Drive folder ID" />
         <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-          💡 Dica: Abra a pasta no Drive e copie o ID da URL
+          💡 Tip: Open the folder in Drive and copy the ID from the URL
         </div>
       </div>
 
       <button id="exportToDriveBtn" type="button" disabled>
-        📤 Exportar Frames Selecionados
+        📤 Export Selected Frames
       </button>
       
       <button id="disconnectDriveBtn" type="button" class="secondary" style="margin-top: 8px;">
-        🔌 Desconectar
+        🔌 Disconnect
       </button>
     </div>
 
-    <!-- Estado 4: Erro -->
+    <!-- State 4: Error -->
     <div id="driveStateError" style="display: none;">
       <div class="result error" id="driveErrorMessage">
-        ❌ Erro na conexão. Por favor, tente novamente.
+        ❌ Connection error. Please try again.
       </div>
       <button id="retryConnectBtn" type="button" style="margin-top: 12px;">
-        🔄 Tentar Novamente
+        🔄 Try Again
       </button>
     </div>
 
-    <!-- Status de Exportação -->
+    <!-- Export Status -->
     <div id="driveExportStatus" style="display: none; margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 13px;"></div>
   </div>
 
@@ -735,6 +753,7 @@ export default function initUI(rootNode: HTMLElement): void {
   initImageEditing();
   initAnalyze();
   initModify();
+  initFrameIterator();
   initResize();
   initExportToDrive();
   initClose();
@@ -1029,10 +1048,10 @@ function initExportToDrive(): void {
     postPluginMessage({ type: 'check-drive-tokens' });
   }
   
-  // Show Estado 1: Não Conectado
+  // Show State 1: Disconnected
   function showDisconnectedState(): void {
-    driveCardTitle.textContent = '☁️ Conectar Google Drive';
-    driveCardDescription.textContent = 'Conecte sua conta para exportar frames diretamente para o Drive.';
+    driveCardTitle.textContent = '☁️ Connect Google Drive';
+    driveCardDescription.textContent = 'Connect your account to export frames directly to Drive.';
     stateDisconnected.style.display = 'block';
     stateConnecting.style.display = 'none';
     stateConnected.style.display = 'none';
@@ -1040,10 +1059,10 @@ function initExportToDrive(): void {
     driveExportStatus.style.display = 'none';
   }
   
-  // Show Estado 2: Conectando (Polling Ativo)
+  // Show State 2: Connecting (Active Polling)
   function showConnectingState(authUrl: string): void {
-    driveCardTitle.textContent = '🔄 Aguardando Autorização...';
-    driveCardDescription.textContent = 'Copie a URL abaixo e autorize no seu navegador.';
+    driveCardTitle.textContent = '🔄 Waiting for Authorization...';
+    driveCardDescription.textContent = 'Copy the URL below and authorize in your browser.';
     authUrlInput.value = authUrl;
     stateDisconnected.style.display = 'none';
     stateConnecting.style.display = 'block';
@@ -1051,12 +1070,12 @@ function initExportToDrive(): void {
     stateError.style.display = 'none';
   }
   
-  // Show Estado 3: Conectado
+  // Show State 3: Connected
   function showConnectedState(userEmail?: string): void {
-    driveCardTitle.textContent = '✅ Google Drive Conectado';
+    driveCardTitle.textContent = '✅ Google Drive Connected';
     driveCardDescription.textContent = userEmail 
-      ? `Autenticado como ${userEmail}. Tokens salvos localmente.`
-      : 'Autenticado com sucesso. Tokens salvos localmente.';
+      ? `Authenticated as ${userEmail}. Tokens saved locally.`
+      : 'Successfully authenticated. Tokens saved locally.';
     stateDisconnected.style.display = 'none';
     stateConnecting.style.display = 'none';
     stateConnected.style.display = 'block';
@@ -1068,10 +1087,10 @@ function initExportToDrive(): void {
     }
   }
   
-  // Show Estado 4: Erro
+  // Show State 4: Error
   function showErrorState(errorMsg: string): void {
-    driveCardTitle.textContent = '❌ Erro na Conexão';
-    driveCardDescription.textContent = 'Ocorreu um erro durante a autenticação.';
+    driveCardTitle.textContent = '❌ Connection Error';
+    driveCardDescription.textContent = 'An error occurred during authentication.';
     driveErrorMessage.innerHTML = `❌ ${errorMsg}`;
     stateDisconnected.style.display = 'none';
     stateConnecting.style.display = 'none';
@@ -1104,7 +1123,7 @@ function initExportToDrive(): void {
     setTimeout(() => {
       if (currentRequestId === requestId) {
         stopPolling();
-        showErrorState('Tempo esgotado. Por favor, tente novamente.');
+        showErrorState('Timeout. Please try again.');
       }
     }, 5 * 60 * 1000);
   }
@@ -1118,26 +1137,26 @@ function initExportToDrive(): void {
       navigator.clipboard.writeText(authUrlInput.value)
         .then(() => {
           const originalText = copyAuthUrlBtn.textContent;
-          copyAuthUrlBtn.textContent = '✅ Copiado!';
+          copyAuthUrlBtn.textContent = '✅ Copied!';
           setTimeout(() => {
             copyAuthUrlBtn.textContent = originalText;
           }, 2000);
         })
         .catch(() => {
           // Fallback: user needs to copy manually
-          alert('URL selecionada. Pressione Cmd+C (Mac) ou Ctrl+C (Windows) para copiar.');
+          alert('URL selected. Press Cmd+C (Mac) or Ctrl+C (Windows) to copy.');
         });
     } else {
       // Fallback for older environments
       try {
         document.execCommand('copy');
         const originalText = copyAuthUrlBtn.textContent;
-        copyAuthUrlBtn.textContent = '✅ Copiado!';
+        copyAuthUrlBtn.textContent = '✅ Copied!';
         setTimeout(() => {
           copyAuthUrlBtn.textContent = originalText;
         }, 2000);
       } catch (err) {
-        alert('URL selecionada. Pressione Cmd+C (Mac) ou Ctrl+C (Windows) para copiar.');
+        alert('URL selected. Press Cmd+C (Mac) or Ctrl+C (Windows) to copy.');
       }
     }
   });
@@ -1201,7 +1220,7 @@ function initExportToDrive(): void {
       driveExportStatus.style.display = 'block';
       driveExportStatus.style.background = '#fee2e2';
       driveExportStatus.style.color = '#991b1b';
-      driveExportStatus.innerHTML = '❌ Por favor, forneça um ID de pasta';
+      driveExportStatus.innerHTML = '❌ Please provide a folder ID';
       return;
     }
     
@@ -1210,7 +1229,7 @@ function initExportToDrive(): void {
     driveExportStatus.style.display = 'block';
     driveExportStatus.style.background = '#dbeafe';
     driveExportStatus.style.color = '#1e40af';
-    driveExportStatus.innerHTML = '⏳ Iniciando exportação...';
+    driveExportStatus.innerHTML = '⏳ Starting export...';
     
     // Request frame exports from plugin
     postPluginMessage({
@@ -1252,6 +1271,21 @@ function initExportToDrive(): void {
       driveExportStatus.innerHTML = html;
     }
   };
+}
+
+function initFrameIterator(): void {
+  const shuffleBtn = getElement<HTMLButtonElement>('shuffleElementsBtn');
+  const spotlightBtn = getElement<HTMLButtonElement>('spotlightBtn');
+
+  shuffleBtn.addEventListener('click', () => {
+    console.log('🔀 Shuffling elements...');
+    postPluginMessage({ type: 'shuffle-elements' });
+  });
+
+  spotlightBtn.addEventListener('click', () => {
+    console.log('👑 Generating spotlight variations...');
+    postPluginMessage({ type: 'generate-spotlight' });
+  });
 }
 
 function initClose(): void {
@@ -1501,9 +1535,9 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
     case 'resize-complete': {
       const message = typeof msg.message === 'string' ? msg.message : 'Frame resized successfully!';
       showResult(message, 'success', 'resultResize');
-      // Re-enable buttons
+      // Re-enable buttons (keep 1920 disabled)
       getElement<HTMLButtonElement>('resizeTo1350Btn').disabled = false;
-      getElement<HTMLButtonElement>('resizeTo1920Btn').disabled = false;
+      // getElement<HTMLButtonElement>('resizeTo1920Btn').disabled = false; // Keep disabled
       console.log('✅ Resize completed');
       break;
     }
@@ -1574,7 +1608,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
 
     case 'auth-status-error': {
       // Error during authentication
-      const errorMsg = (msg.message as string) || 'Erro desconhecido durante a autenticação';
+      const errorMsg = (msg.message as string) || 'Unknown error during authentication';
       const driveUI = (window as any).driveUI;
       
       console.error('❌ Authentication error:', errorMsg);
@@ -1671,12 +1705,12 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
 
       if (errorCount === 0) {
         driveUI.showExportStatus(
-          `✅ ${successCount} frame(s) exportado(s) com sucesso para o Google Drive!`,
+          `✅ ${successCount} frame(s) successfully exported to Google Drive!`,
           'success'
         );
       } else {
         driveUI.showExportStatus(
-          `⚠️ Exportado ${successCount}/${totalFrames} frames. ${errorCount} falharam.`,
+          `⚠️ Exported ${successCount}/${totalFrames} frames. ${errorCount} failed.`,
           'error'
         );
       }
@@ -1692,10 +1726,10 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       getElement<HTMLButtonElement>('generateBtn').disabled = false;
       getElement<HTMLDivElement>('loadingEditImages').style.display = 'none';
       getElement<HTMLButtonElement>('editImagesBtn').disabled = false;
-      // Re-enable resize buttons on error
+      // Re-enable resize buttons on error (keep 1920 disabled)
       if (msg.context === 'resize') {
         getElement<HTMLButtonElement>('resizeTo1350Btn').disabled = false;
-        getElement<HTMLButtonElement>('resizeTo1920Btn').disabled = false;
+        // getElement<HTMLButtonElement>('resizeTo1920Btn').disabled = false; // Keep disabled
       }
 
       const message = typeof msg.message === 'string' ? msg.message : 'Unknown error';

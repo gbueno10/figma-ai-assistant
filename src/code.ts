@@ -4,6 +4,7 @@
 import { showUI } from '@create-figma-plugin/utilities';
 import { AIDesignAssistant } from './aiDesignAssistant';
 import { DesignModificationHandler } from './handlers/designModificationHandler';
+import { FrameIteratorHandler } from './handlers/frameIteratorHandler';
 import { DEFAULT_BACKEND_BASE_URL } from './config';
 import { setBackendBaseUrl, getBackendBaseUrl } from './services/backendClient';
 import { NamingUtils } from './utils/namingConvention';
@@ -184,6 +185,14 @@ function initializeUiMessageHandler() {
     } else if (msg.type === 'edit-frame-images') {
       console.log('🖼️ Starting frame image editing directly...');
       await executeFrameImageEditing(msg);
+      
+    } else if (msg.type === 'shuffle-elements') {
+      console.log('🔀 Shuffling elements...');
+      await FrameIteratorHandler.handleShuffleElements();
+
+    } else if (msg.type === 'generate-spotlight') {
+      console.log('👑 Generating spotlight variations...');
+      await FrameIteratorHandler.handleGenerateSpotlight();
       
     } else if (msg.type === 'check-drive-tokens') {
       // Check if tokens exist in clientStorage
@@ -700,151 +709,141 @@ async function handleFrameReflow(newHeight: number) {
     throw new Error('Invalid height provided for resizing.');
   }
 
-  const selection = figma.currentPage.selection;
+  // 1. Filter only frames from selection
+  const selection = figma.currentPage.selection.filter(node => node.type === 'FRAME') as FrameNode[];
 
-  if (selection.length !== 1 || selection[0].type !== 'FRAME') {
-    throw new Error('Please select a single frame to resize.');
+  if (selection.length === 0) {
+    throw new Error('Please select at least one frame to resize.');
   }
 
-  const baseFrame = selection[0] as FrameNode;
-  const oldWidth = baseFrame.width;
-  const oldHeight = baseFrame.height;
+  const newFrames: FrameNode[] = [];
+  let successCount = 0;
 
-  if (Math.round(oldHeight) === Math.round(newHeight)) {
-    throw new Error('The frame already has the desired height.');
-  }
+  // 2. Iterate over each selected frame
+  for (const baseFrame of selection) {
+    const oldWidth = baseFrame.width;
+    const oldHeight = baseFrame.height;
 
-  if (newHeight < oldHeight) {
-    throw new Error('This function only supports increasing the height of the selected frame.');
-  }
-
-  const newFrame = baseFrame.clone();
-  newFrame.x = baseFrame.x + baseFrame.width + 100;
-  newFrame.y = baseFrame.y;
-
-  // Aplicar nomenclatura Dogo
-  try {
-    // Apenas atualizar a dimensão no nome, mantendo ticket e variant originais
-    const originalName = baseFrame.name;
-    const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
-    const nameBase = originalName.replace(dateRegex, '');
-    
-    // Remove sufixos como " - Permuted" que o Figma adiciona
-    const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
-    
-    // Remove prefixo Dogo_ se existir
-    const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
-    
-    // Split por underscore para pegar os componentes
-    const parts = withoutDogo.split('_');
-    
-    // Atualizar a dimensão (geralmente é o 3º componente após ticket e variant)
-    // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
-    const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
-    
-    let newName = '';
-    
-    // Verifica se o primeiro componente é um ticket (Ticket123 ou 123)
-    const ticketRegex = /^(Ticket\d+|\d+)$/;
-    const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
-    
-    if (hasTicket && parts.length >= 3) {
-      // Caso 1: Tem ticket number no primeiro componente (convenção Dogo padrão)
-      // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
-      // Substituir apenas a Dimension (posição 2), manter ticket, variant e resto
-      const restOfParts = parts.slice(3); // Pula ticket, variant e dimension antiga
-      newName = `Dogo_${parts[0]}_${parts[1]}_${newDimension}_${restOfParts.join('_')}`;
-      console.log(`✅ Updated dimension in Dogo convention: ${newDimension}`);
-    } else {
-      // Caso 2: NÃO tem ticket number no início - apenas adiciona dimensão
-      newName = `Dogo_${withoutDogo}_${newDimension}`;
-      console.log(`⚠️ No ticket found, appending dimension to: ${withoutDogo}`);
+    // Skip if already has the desired height (optional, but avoids clutter)
+    if (Math.round(oldHeight) === Math.round(newHeight)) {
+      console.log(`⚠️ Frame ${baseFrame.name} already has desired height.`);
+      continue;
     }
-    
-    newFrame.name = newName;
-    
-    console.log(`🏷️ Frame resize renamed: ${newName}`);
-  } catch (namingError) {
-    console.log(`⚠️ Failed to apply Dogo naming convention on resize: ${namingError}`);
-    newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)})`;
-  }
 
-  const frameWithResize = newFrame as FrameNode;
-  if (typeof frameWithResize.resizeWithoutConstraints === 'function') {
-    frameWithResize.resizeWithoutConstraints(oldWidth, newHeight);
-  } else {
-    frameWithResize.resize(oldWidth, newHeight);
-  }
-
-  const heightDifference = newHeight - oldHeight;
-  const bottomThresholdOriginal = oldHeight * 0.6;
-  let backgroundNode: (SceneNode & { resize: (width: number, height: number) => void }) | undefined;
-
-  for (const child of newFrame.children) {
-    const normalizedName = child.name.toLowerCase();
-    const childWidth = typeof (child as any).width === 'number' ? ((child as any).width as number) : undefined;
-    const childHeight = typeof (child as any).height === 'number' ? ((child as any).height as number) : undefined;
-    const childTop = 'y' in child ? (child as SceneNode & { y: number }).y : 0;
-
-    const coversFrame =
-      typeof childWidth === 'number' &&
-      typeof childHeight === 'number' &&
-      childWidth >= oldWidth * 0.95 &&
-      childHeight >= oldHeight * 0.95 &&
-      childTop <= oldHeight * 0.1;
-
-    const isPotentialBackground =
-      normalizedName.includes('bg') ||
-      normalizedName.includes('background') ||
-      coversFrame;
-
-    if (!backgroundNode && isPotentialBackground && 'resize' in child) {
-      backgroundNode = child as SceneNode & { resize: (width: number, height: number) => void };
+    if (newHeight < oldHeight) {
+       console.log(`⚠️ Skipping ${baseFrame.name}: Target height must be greater than current height.`);
+       continue;
     }
-  }
 
-  if (backgroundNode) {
-    const widthForResize =
-      typeof (backgroundNode as any).width === 'number'
-        ? ((backgroundNode as any).width as number)
-        : oldWidth;
-    console.log(`📏 Esticando background: ${backgroundNode.name}`);
+    // Clone and position
+    const newFrame = baseFrame.clone();
+    newFrame.x = baseFrame.x + baseFrame.width + 50; // Next to original
+    newFrame.y = baseFrame.y;
+
+    // --- Dogo Naming Logic (Copied and kept inside loop) ---
     try {
-      backgroundNode.resize(widthForResize, newHeight);
-    } catch (error) {
-      console.log('⚠️ Could not stretch the detected background:', error);
+      const originalName = baseFrame.name;
+      const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
+      const nameBase = originalName.replace(dateRegex, '');
+      const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
+      const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
+      const parts = withoutDogo.split('_');
+      const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
+      
+      let newName = '';
+      const ticketRegex = /^(Ticket\d+|\d+)$/;
+      const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
+
+      if (hasTicket && parts.length >= 3) {
+        const restOfParts = parts.slice(3);
+        newName = `Dogo_${parts[0]}_${parts[1]}_${newDimension}_${restOfParts.join('_')}`;
+      } else {
+        newName = `Dogo_${withoutDogo}_${newDimension}`;
+      }
+      
+      newFrame.name = newName;
+    } catch (namingError) {
+      newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)})`;
     }
+    // ----------------------------------------------------------------
+
+    // Resize Frame
+    if (typeof newFrame.resizeWithoutConstraints === 'function') {
+      newFrame.resizeWithoutConstraints(oldWidth, newHeight);
+    } else {
+      newFrame.resize(oldWidth, newHeight);
+    }
+
+    const heightDifference = newHeight - oldHeight;
+    const bottomThresholdOriginal = oldHeight * 0.6;
+    let backgroundNode: (SceneNode & { resize: (width: number, height: number) => void }) | undefined;
+
+    // Identify Background
+    for (const child of newFrame.children) {
+      const normalizedName = child.name.toLowerCase();
+      const childWidth = typeof (child as any).width === 'number' ? ((child as any).width as number) : undefined;
+      const childHeight = typeof (child as any).height === 'number' ? ((child as any).height as number) : undefined;
+      const childTop = 'y' in child ? (child as SceneNode & { y: number }).y : 0;
+
+      const coversFrame =
+        typeof childWidth === 'number' &&
+        typeof childHeight === 'number' &&
+        childWidth >= oldWidth * 0.95 &&
+        childHeight >= oldHeight * 0.95 &&
+        childTop <= oldHeight * 0.1;
+
+      const isPotentialBackground =
+        normalizedName.includes('bg') ||
+        normalizedName.includes('background') ||
+        coversFrame;
+
+      if (!backgroundNode && isPotentialBackground && 'resize' in child) {
+        backgroundNode = child as SceneNode & { resize: (width: number, height: number) => void };
+      }
+    }
+
+    // Stretch Background
+    if (backgroundNode) {
+      const widthForResize = typeof (backgroundNode as any).width === 'number' ? ((backgroundNode as any).width as number) : oldWidth;
+      try {
+        backgroundNode.resize(widthForResize, newHeight);
+      } catch (error) {
+        console.log('Could not stretch background:', error);
+      }
+    }
+
+    // Move Footer
+    for (const child of newFrame.children) {
+      if (child === backgroundNode) continue;
+      if (!('y' in child)) continue;
+
+      const childNode = child as SceneNode & { y: number };
+      const childHeight = typeof (child as any).height === 'number' ? ((child as any).height as number) : 0;
+      const childCenterYOriginal = childNode.y + childHeight / 2;
+      const constraints = (child as any).constraints as { vertical?: string } | undefined;
+      const verticalConstraint = constraints?.vertical ?? 'MIN';
+      const isFooterElement = childCenterYOriginal > bottomThresholdOriginal;
+
+      if (isFooterElement && verticalConstraint === 'MIN') {
+        childNode.y += heightDifference;
+      }
+    }
+
+    newFrames.push(newFrame);
+    successCount++;
   }
 
-  for (const child of newFrame.children) {
-    if (child === backgroundNode) {
-      continue;
-    }
+  if (newFrames.length > 0) {
+    // 3. Select all newly created frames
+    figma.currentPage.selection = newFrames;
+    figma.viewport.scrollAndZoomIntoView(newFrames);
 
-    if (!('y' in child)) {
-      continue;
-    }
-
-    const childNode = child as SceneNode & { y: number };
-    const childHeight =
-      typeof (child as any).height === 'number' ? ((child as any).height as number) : 0;
-    const childCenterYOriginal = childNode.y + childHeight / 2;
-    const constraints = (child as any).constraints as { vertical?: string } | undefined;
-    const verticalConstraint = constraints?.vertical ?? 'MIN';
-    const isFooterElement = childCenterYOriginal > bottomThresholdOriginal;
-
-    if (isFooterElement && verticalConstraint === 'MIN') {
-      console.log(`🚚 Movendo elemento de rodapé: ${child.name}`);
-      childNode.y += heightDifference;
-    }
+    const successMsg = `✅ Processed ${successCount} frame(s) [Reflow]`;
+    figma.notify(successMsg, { timeout: 3000 });
+    figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
+  } else {
+    figma.notify("⚠️ No frames were resized (check if they are already correct size).");
   }
-
-  figma.currentPage.selection = [newFrame];
-  figma.viewport.scrollAndZoomIntoView([newFrame]);
-
-  const successMsg = `✅ Novo frame criado: ${Math.round(oldWidth)}x${Math.round(newHeight)} [Reflow]`;
-  figma.notify(successMsg, { timeout: 3000 });
-  figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
 }
 
 function findImageNodes(node: SceneNode): SceneNode[] {
@@ -871,112 +870,102 @@ async function handleFrameStretch(newHeight: number) {
     throw new Error('Invalid height provided for resizing.');
   }
 
-  const selection = figma.currentPage.selection;
+  // 1. Filter Frames
+  const selection = figma.currentPage.selection.filter(node => node.type === 'FRAME') as FrameNode[];
 
-  if (selection.length !== 1 || selection[0].type !== 'FRAME') {
-    throw new Error('Please select a single frame to resize.');
+  if (selection.length === 0) {
+    throw new Error('Please select at least one frame to resize.');
   }
 
-  const baseFrame = selection[0] as FrameNode;
-  const oldWidth = baseFrame.width;
-  const oldHeight = baseFrame.height;
+  const newFrames: FrameNode[] = [];
+  let successCount = 0;
 
-  if (Math.round(oldHeight) === Math.round(newHeight)) {
-    throw new Error('The frame already has the desired height.');
-  }
+  // 2. Loop
+  for (const baseFrame of selection) {
+    const oldWidth = baseFrame.width;
+    const oldHeight = baseFrame.height;
 
-  if (newHeight < oldHeight) {
-    throw new Error('This function only supports increasing the height of the selected frame.');
-  }
+    if (Math.round(oldHeight) === Math.round(newHeight)) continue;
+    if (newHeight < oldHeight) continue;
 
-  const stretchRatio = newHeight / oldHeight;
-  const newFrame = baseFrame.clone();
-  newFrame.x = baseFrame.x + baseFrame.width + 100;
-  newFrame.y = baseFrame.y;
+    const stretchRatio = newHeight / oldHeight;
+    
+    // Clone and position
+    const newFrame = baseFrame.clone();
+    newFrame.x = baseFrame.x + baseFrame.width + 100;
+    newFrame.y = baseFrame.y;
 
-  // Aplicar nomenclatura Dogo
-  try {
-    // Apenas atualizar a dimensão no nome, mantendo ticket e variant originais
-    const originalName = baseFrame.name;
-    const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
-    const nameBase = originalName.replace(dateRegex, '');
-    
-    // Remove sufixos como " - Permuted" que o Figma adiciona
-    const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
-    
-    // Remove prefixo Dogo_ se existir
-    const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
-    
-    // Split por underscore para pegar os componentes
-    const parts = withoutDogo.split('_');
-    
-    // Atualizar a dimensão (geralmente é o 3º componente após ticket e variant)
-    // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
-    const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
-    
-    let newName = '';
-    
-    // Verifica se o primeiro componente é um ticket (Ticket123 ou 123)
-    const ticketRegex = /^(Ticket\d+|\d+)$/;
-    const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
-    
-    if (hasTicket && parts.length >= 3) {
-      // Caso 1: Tem ticket number no primeiro componente (convenção Dogo padrão)
-      // Formato: Ticket_Variant_Dimension_Type_Device_Concept_Tactic_Elements_Lang_Color_Launch
-      // Substituir apenas a Dimension (posição 2), manter ticket, variant e resto
-      const restOfParts = parts.slice(3); // Pula ticket, variant e dimension antiga
-      newName = `Dogo_${parts[0]}_${parts[1]}_${newDimension}_${restOfParts.join('_')}`;
-      console.log(`✅ Updated dimension in Dogo convention: ${newDimension}`);
+    // --- Dogo Naming Logic ---
+    try {
+      const originalName = baseFrame.name;
+      const dateRegex = /_([A-Za-z]{3}\d{1,2})$/;
+      const nameBase = originalName.replace(dateRegex, '');
+      const cleanNameBase = nameBase.replace(/(\s*-\s*Permuted)+$/gi, '').trim();
+      const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
+      const parts = withoutDogo.split('_');
+      const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
+      
+      let newName = '';
+      const ticketRegex = /^(Ticket\d+|\d+)$/;
+      const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
+      
+      if (hasTicket && parts.length >= 3) {
+        const restOfParts = parts.slice(3);
+        newName = `Dogo_${parts[0]}_${parts[1]}_${newDimension}_${restOfParts.join('_')}`;
+      } else {
+        newName = `Dogo_${withoutDogo}_${newDimension}`;
+      }
+      newFrame.name = newName;
+    } catch (namingError) {
+      newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)}) [Stretch]`;
+    }
+    // --------------------------
+
+    // Resize Frame
+    if (typeof newFrame.resizeWithoutConstraints === 'function') {
+      newFrame.resizeWithoutConstraints(oldWidth, newHeight);
     } else {
-      // Caso 2: NÃO tem ticket number no início - apenas adiciona dimensão
-      newName = `Dogo_${withoutDogo}_${newDimension}`;
-      console.log(`⚠️ No ticket found, appending dimension to: ${withoutDogo}`);
-    }
-    
-    newFrame.name = newName;
-    
-    console.log(`🏷️ Frame resize renamed: ${newName}`);
-  } catch (namingError) {
-    console.log(`⚠️ Failed to apply Dogo naming convention on resize: ${namingError}`);
-    newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)}) [Stretch]`;
-  }
-
-  const frameWithResize = newFrame as FrameNode;
-  if (typeof frameWithResize.resizeWithoutConstraints === 'function') {
-    frameWithResize.resizeWithoutConstraints(oldWidth, newHeight);
-  } else {
-    frameWithResize.resize(oldWidth, newHeight);
-  }
-
-  for (const child of newFrame.children) {
-    if ('y' in child) {
-      const childNode = child as SceneNode & { y: number };
-      childNode.y *= stretchRatio;
+      newFrame.resize(oldWidth, newHeight);
     }
 
-    if ('resize' in child && typeof (child as any).height === 'number') {
-      const resizableChild = child as SceneNode & {
-        resize: (width: number, height: number) => void;
-      };
-      const childWidth = typeof (child as any).width === 'number' ? ((child as any).width as number) : undefined;
-      const childHeight = (child as any).height as number;
+    // Stretch children
+    for (const child of newFrame.children) {
+      if ('y' in child) {
+        const childNode = child as SceneNode & { y: number };
+        childNode.y *= stretchRatio;
+      }
 
-      if (typeof childWidth === 'number') {
-        try {
-          resizableChild.resize(childWidth, childHeight * stretchRatio);
-        } catch (error) {
-          console.log(`⚠️ Falha ao esticar ${child.name}:`, error);
+      if ('resize' in child && typeof (child as any).height === 'number') {
+        const resizableChild = child as SceneNode & {
+          resize: (width: number, height: number) => void;
+        };
+        const childWidth = typeof (child as any).width === 'number' ? ((child as any).width as number) : undefined;
+        const childHeight = (child as any).height as number;
+
+        if (typeof childWidth === 'number') {
+          try {
+            resizableChild.resize(childWidth, childHeight * stretchRatio);
+          } catch (error) {
+            console.log(`⚠️ Failed to stretch ${child.name}`);
+          }
         }
       }
     }
+    
+    newFrames.push(newFrame);
+    successCount++;
   }
 
-  figma.currentPage.selection = [newFrame];
-  figma.viewport.scrollAndZoomIntoView([newFrame]);
-
-  const successMsg = `✅ Novo frame criado: ${Math.round(oldWidth)}x${Math.round(newHeight)} [Stretch]`;
-  figma.notify(successMsg, { timeout: 3000 });
-  figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
+  if (newFrames.length > 0) {
+    figma.currentPage.selection = newFrames;
+    figma.viewport.scrollAndZoomIntoView(newFrames);
+    
+    const successMsg = `✅ Processed ${successCount} frame(s) [Stretch]`;
+    figma.notify(successMsg, { timeout: 3000 });
+    figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
+  } else {
+    figma.notify("⚠️ No frames were stretched.");
+  }
 }
 
 /**

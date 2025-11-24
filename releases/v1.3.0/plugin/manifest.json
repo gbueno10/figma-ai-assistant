@@ -1,0 +1,21 @@
+
+{
+  "name": "AI Design Assistant",
+  "id": "figma-ai-assistant",
+  "api": "1.0.0",
+  "main": "dist/build/main.js",
+  "ui": "dist/build/ui.js",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://lh3.googleusercontent.com"
+    ],
+    "devAllowedDomains": [
+      "http://localhost:3000",
+      "https://localhost:3000",
+      "https://lh3.googleusercontent.com"
+    ],
+    "reasoning": "The plugin communicates with a local backend during development for AI processing."
+  }
+}

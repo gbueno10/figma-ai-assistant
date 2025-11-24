@@ -14,8 +14,8 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
 
-# Build TypeScript
-RUN npm run build
+# Build TypeScript with increased memory limit
+RUN NODE_OPTIONS="--max-old-space-size=2048" npm run build
 
 # Remove dev dependencies
 RUN npm prune --omit=dev

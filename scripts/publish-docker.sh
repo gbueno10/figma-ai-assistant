@@ -6,7 +6,7 @@
 set -e
 
 VERSION=${1:-"latest"}
-IMAGE_NAME="gbueno10/figma-ai-backend"
+IMAGE_NAME="gbuenos/figma-ai-backend"
 BACKEND_DIR="backend"
 
 echo "🐳 Publishing Docker image: $IMAGE_NAME:$VERSION"

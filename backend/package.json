@@ -1,6 +1,6 @@
 {
   "name": "figma-ai-assistant-backend",
-  "version": "0.1.0",
+  "version": "1.3.0",
   "description": "Backend service for the Figma AI Assistant plugin",
   "main": "dist/index.js",
   "scripts": {

@@ -386,4 +386,136 @@ router.post('/refresh-token', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/drive/list-images?folderId=XYZ
+ * List all images in the Image Bank folder
+ * Query: { folderId, tokens (JSON string) }
+ */
+router.get('/list-images', async (req: Request, res: Response) => {
+  try {
+    const folderId = req.query.folderId as string;
+    let tokens: any = req.body.tokens;
+
+    if (!tokens && typeof req.query.tokens === 'string') {
+      try {
+        tokens = JSON.parse(req.query.tokens);
+      } catch (parseError) {
+        return res.status(400).json({ error: 'Invalid tokens payload' });
+      }
+    }
+
+    if (!folderId) {
+      return res.status(400).json({ error: 'Missing folderId parameter' });
+    }
+
+    if (!tokens || !tokens.access_token) {
+      return res.status(400).json({ error: 'Missing access token' });
+    }
+
+    console.log(`📂 Listing images from folder: ${folderId}`);
+
+    try {
+      const files = await driveService.listImageBankFiles(tokens.access_token, folderId);
+      console.log(`✅ Found ${files.length} images in Image Bank`);
+
+      return res.json({
+        success: true,
+        files,
+        count: files.length,
+      });
+    } catch (listError: any) {
+      const status = listError?.code || listError?.response?.status;
+      const originalMessage = listError instanceof Error ? listError.message : 'Unknown error';
+
+      // Attempt token refresh on 401 if refresh_token exists
+      if ((status === 401 || status === 403) && tokens.refresh_token) {
+        try {
+          console.log('🔄 Access token expired, trying to refresh...');
+          const refreshedTokens = await driveService.refreshAccessToken(tokens.refresh_token);
+          const mergedTokens = {
+            ...tokens,
+            ...refreshedTokens,
+            refresh_token: tokens.refresh_token, // keep original refresh token if not returned
+          };
+          const files = await driveService.listImageBankFiles(
+            mergedTokens.access_token,
+            folderId
+          );
+          console.log(`✅ Found ${files.length} images in Image Bank after token refresh`);
+
+          return res.json({
+            success: true,
+            files,
+            count: files.length,
+            refreshedTokens: mergedTokens,
+          });
+        } catch (refreshError) {
+          console.error('❌ Failed to refresh token for list-images:', refreshError);
+          return res.status(401).json({
+            error: 'Access token expired and refresh failed',
+            message: refreshError instanceof Error ? refreshError.message : 'Unknown error',
+          });
+        }
+      }
+
+      console.error('Error listing Image Bank files:', listError);
+      return res.status(500).json({
+        error: 'Failed to list files',
+        message: originalMessage,
+      });
+    }
+  } catch (error) {
+    console.error('Error listing Image Bank files:', error);
+    res.status(500).json({
+      error: 'Failed to list files',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/drive/image/:fileId
+ * Download image as Base64
+ * Path param: fileId
+ * Returns: { base64: "..." }
+ */
+router.get('/image/:fileId', async (req: Request, res: Response) => {
+  try {
+    const fileId = req.params.fileId;
+    const tokens = req.body.tokens || JSON.parse(req.query.tokens as string || '{}');
+
+    if (!fileId) {
+      return res.status(400).json({ error: 'Missing fileId parameter' });
+    }
+
+    if (!tokens || !tokens.access_token) {
+      return res.status(400).json({ error: 'Missing access token' });
+    }
+
+    console.log(`📥 Downloading image: ${fileId}`);
+
+    const arrayBuffer = await driveService.getFileArrayBuffer(tokens.access_token, fileId);
+    
+    // Convert ArrayBuffer to Buffer
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // Convert to Base64
+    const base64 = buffer.toString('base64');
+
+    console.log(`✅ Image downloaded: ${(base64.length / 1024).toFixed(2)} KB`);
+
+    res.json({
+      success: true,
+      base64: base64,
+      size: base64.length,
+    });
+  } catch (error) {
+    console.error('Error downloading image:', error);
+    res.status(500).json({
+      error: 'Failed to download image',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 export default router;

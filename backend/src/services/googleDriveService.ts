@@ -115,4 +115,64 @@ export class GoogleDriveService {
       throw new Error('Failed to refresh access token');
     }
   }
+
+  /**
+   * List images from Image Bank folder
+   * Returns lightweight metadata: id, name, thumbnailLink, webViewLink
+   */
+  async listImageBankFiles(accessToken: string, folderId: string) {
+    try {
+      this.oauth2Client.setCredentials({ access_token: accessToken });
+      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+
+      // Query to list only images, not trashed, inside the specific folder
+      const response = await drive.files.list({
+        q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
+        fields: 'files(id, name, thumbnailLink, webViewLink, driveId)',
+        pageSize: 1000, // Should be sufficient for most use cases
+        orderBy: 'name', // Order alphabetically
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        corpora: 'allDrives',
+      });
+
+      return response.data.files || [];
+    } catch (error) {
+      console.error('Error listing Image Bank files:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const status = (error as any)?.code || (error as any)?.response?.status;
+      const wrappedError = new Error(`Failed to list files: ${message}`) as Error & { code?: number };
+      if (status) {
+        wrappedError.code = status;
+      }
+      throw wrappedError;
+    }
+  }
+
+  /**
+   * Download image binary data as ArrayBuffer
+   * Returns raw binary data for the file
+   */
+  async getFileArrayBuffer(accessToken: string, fileId: string): Promise<ArrayBuffer> {
+    try {
+      this.oauth2Client.setCredentials({ access_token: accessToken });
+      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+
+      const response = await drive.files.get(
+        { fileId, alt: 'media' },
+        { responseType: 'arraybuffer' }
+      );
+
+      return response.data as ArrayBuffer;
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const status = (error as any)?.code || (error as any)?.response?.status;
+      const wrappedError = new Error(`Failed to download file: ${message}`) as Error & { code?: number };
+      if (status) {
+        wrappedError.code = status;
+      }
+      throw wrappedError;
+    }
+  }
 }

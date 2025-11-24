@@ -8,10 +8,13 @@
   "editorType": ["figma"],
   "documentAccess": "dynamic-page",
   "networkAccess": {
-    "allowedDomains": ["none"],
+    "allowedDomains": [
+      "https://lh3.googleusercontent.com"
+    ],
     "devAllowedDomains": [
       "http://localhost:3000",
-      "https://localhost:3000"
+      "https://localhost:3000",
+      "https://lh3.googleusercontent.com"
     ],
     "reasoning": "The plugin communicates with a local backend during development for AI processing."
   }

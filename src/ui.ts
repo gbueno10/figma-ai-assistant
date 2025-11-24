@@ -461,6 +461,58 @@ button.secondary:hover {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(99, 102, 241, 0.6);
 }
+
+.image-bank-item {
+  position: relative;
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: hidden;
+  aspect-ratio: 1;
+  background: #f1f5f9;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.image-bank-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: #667eea;
+}
+
+.image-bank-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-bank-item-name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 6px;
+  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+  color: white;
+  font-size: 10px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.image-bank-downloading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+}
 `;
 
 const template = `
@@ -771,6 +823,63 @@ const template = `
     <div id="driveExportStatus" style="display: none; margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 13px;"></div>
   </div>
 
+  <!-- 🐶 Image Bank Browser -->
+  <div class="ai-card">
+    <h2>🐶 Image Bank Browser</h2>
+    <div class="card-description">
+      Browse and swap images from your Google Drive Image Bank. Select an element and click an image to replace it.
+    </div>
+
+    <!-- Filters -->
+    <div style="margin: 16px 0; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+      <div>
+        <label for="filterAge" style="display: block; font-size: 11px; color: #64748b; margin-bottom: 4px;">Age:</label>
+        <select id="filterAge" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12px;">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div>
+        <label for="filterColor" style="display: block; font-size: 11px; color: #64748b; margin-bottom: 4px;">Color:</label>
+        <select id="filterColor" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12px;">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div>
+        <label for="filterAction" style="display: block; font-size: 11px; color: #64748b; margin-bottom: 4px;">Action:</label>
+        <select id="filterAction" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12px;">
+          <option value="">All</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Load Button -->
+    <button id="loadImageBankBtn" type="button">
+      📂 Load Image Bank
+    </button>
+
+    <!-- Loading State -->
+    <div id="imageBankLoading" style="display: none; margin-top: 12px; text-align: center; color: #64748b;">
+      <div style="font-size: 24px; margin-bottom: 8px;">⏳</div>
+      <div>Loading images...</div>
+    </div>
+
+    <!-- Image Grid -->
+    <div id="imageBankGrid" style="display: none; margin-top: 16px; max-height: 400px; overflow-y: auto;">
+      <div id="imageBankCount" style="font-size: 12px; color: #64748b; margin-bottom: 12px;"></div>
+      <div id="imageBankImages" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;"></div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="imageBankEmpty" style="display: none; margin-top: 16px; text-align: center; padding: 24px; background: #f8fafc; border-radius: 8px; color: #64748b;">
+      <div style="font-size: 32px; margin-bottom: 8px;">📁</div>
+      <div>No images found in Image Bank</div>
+      <div style="font-size: 12px; margin-top: 4px;">Make sure your Image Bank folder has images</div>
+    </div>
+
+    <!-- Status Message -->
+    <div id="imageBankStatus" style="display: none; margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 13px;"></div>
+  </div>
+
     <button id="closeBtn" class="secondary">❌ Close Assistant</button>
   </div>
 </div>
@@ -783,6 +892,7 @@ type PluginToUiMessage = {
 
 let stylesInjected = false;
 let messageListenerRegistered = false;
+let suppressSettingsRender = false;
 
 export default function initUI(rootNode: HTMLElement): void {
   injectStyles();
@@ -798,6 +908,7 @@ export default function initUI(rootNode: HTMLElement): void {
   initFrameIterator();
   initResize();
   initExportToDrive();
+  initImageBankBrowser();
   initClose();
   registerMessageListener();
   loadSettings();
@@ -1434,6 +1545,10 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
 
   switch (msg.type) {
     case 'settings-loaded': {
+      if (suppressSettingsRender) {
+        console.log('ℹ️ Settings loaded (UI update skipped due to active flow)');
+        break;
+      }
       const apiKeyInput = getElement<HTMLInputElement>('apiKey');
       const backendUrlInput = getElement<HTMLInputElement>('backendUrl');
       const exportsFolderInput = getElement<HTMLInputElement>('exportsFolder');
@@ -2062,4 +2177,383 @@ function escapeHtml(value: unknown): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function initImageBankBrowser(): void {
+  const loadBtn = getElement<HTMLButtonElement>('loadImageBankBtn');
+  const loadingDiv = getElement<HTMLDivElement>('imageBankLoading');
+  const gridDiv = getElement<HTMLDivElement>('imageBankGrid');
+  const countDiv = getElement<HTMLDivElement>('imageBankCount');
+  const imagesDiv = getElement<HTMLDivElement>('imageBankImages');
+  const emptyDiv = getElement<HTMLDivElement>('imageBankEmpty');
+  const statusDiv = getElement<HTMLDivElement>('imageBankStatus');
+  const imageBankFolderInput = getElement<HTMLInputElement>('imageBankFolder');
+  const filterAge = getElement<HTMLSelectElement>('filterAge');
+  const filterColor = getElement<HTMLSelectElement>('filterColor');
+  const filterAction = getElement<HTMLSelectElement>('filterAction');
+
+  interface ParsedImage {
+    id: string;
+    name: string;
+    thumbnailLink?: string;
+    webViewLink?: string;
+    age: string;
+    color: string;
+    action: string;
+    displayLabel: string;
+    isStructured: boolean;
+  }
+
+  let allImages: ParsedImage[] = [];
+  let filteredImages: ParsedImage[] = [];
+  let cachedDriveTokens: any = null;
+  let backendBaseUrl = '';
+  let imageBankFolderId = '';
+
+  function waitForPluginMessageOnce(expectedType: string, timeoutMs = 6000): Promise<PluginToUiMessage> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        window.removeEventListener('message', handler);
+        reject(new Error(`Timeout waiting for ${expectedType}`));
+      }, timeoutMs);
+
+      const handler = (event: MessageEvent) => {
+        const msg = event.data.pluginMessage;
+        if (msg?.type === expectedType) {
+          clearTimeout(timeout);
+          window.removeEventListener('message', handler);
+          resolve(msg);
+        }
+      };
+
+      window.addEventListener('message', handler);
+    });
+  }
+
+  // Parse filename according to convention: AI_dog_{age}_{color}_{action}.ext
+  function parseFilename(filename: string): { age: string; color: string; action: string; displayLabel: string; isStructured: boolean } {
+    // Remove extension
+    const nameWithoutExt = filename.replace(/\.(png|jpg|jpeg|gif|webp)$/i, '');
+    
+    // Split by underscore
+    const parts = nameWithoutExt.split('_');
+    
+    // Validate format: AI_dog_{age}_{color}_{action}
+    if (parts.length >= 5 && parts[0] === 'AI' && parts[1] === 'dog') {
+      return {
+        age: parts[2] || 'unknown',
+        color: parts[3] || 'unknown',
+        action: parts[4] || 'unknown',
+        displayLabel: `${parts[2] || 'unknown'} ${parts[3] || 'unknown'} ${parts[4] || 'unknown'}`.trim(),
+        isStructured: true
+      };
+    }
+
+    // Fallback: include the file even if it doesn't match the convention
+    return {
+      age: 'unknown',
+      color: 'unknown',
+      action: 'unknown',
+      displayLabel: nameWithoutExt,
+      isStructured: false
+    };
+  }
+
+  // Populate filter options dynamically
+  function populateFilters(images: ParsedImage[]): void {
+    const ages = new Set<string>();
+    const colors = new Set<string>();
+    const actions = new Set<string>();
+
+    images.forEach(img => {
+      ages.add(img.age);
+      colors.add(img.color);
+      actions.add(img.action);
+    });
+
+    // Clear and populate Age filter
+    filterAge.innerHTML = '<option value="">All</option>';
+    Array.from(ages).sort().forEach(age => {
+      const option = document.createElement('option');
+      option.value = age;
+      option.textContent = age.charAt(0).toUpperCase() + age.slice(1);
+      filterAge.appendChild(option);
+    });
+
+    // Clear and populate Color filter
+    filterColor.innerHTML = '<option value="">All</option>';
+    Array.from(colors).sort().forEach(color => {
+      const option = document.createElement('option');
+      option.value = color;
+      option.textContent = color.charAt(0).toUpperCase() + color.slice(1);
+      filterColor.appendChild(option);
+    });
+
+    // Clear and populate Action filter
+    filterAction.innerHTML = '<option value="">All</option>';
+    Array.from(actions).sort().forEach(action => {
+      const option = document.createElement('option');
+      option.value = action;
+      option.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+      filterAction.appendChild(option);
+    });
+  }
+
+  // Apply filters
+  function applyFilters(): void {
+    const ageFilter = filterAge.value;
+    const colorFilter = filterColor.value;
+    const actionFilter = filterAction.value;
+
+    filteredImages = allImages.filter(img => {
+      if (ageFilter && img.age !== ageFilter) return false;
+      if (colorFilter && img.color !== colorFilter) return false;
+      if (actionFilter && img.action !== actionFilter) return false;
+      return true;
+    });
+
+    renderImageGrid();
+  }
+
+  // Render image grid
+  function renderImageGrid(): void {
+    imagesDiv.innerHTML = '';
+
+    if (filteredImages.length === 0) {
+      gridDiv.style.display = 'none';
+      emptyDiv.style.display = 'block';
+      return;
+    }
+
+    emptyDiv.style.display = 'none';
+    gridDiv.style.display = 'block';
+    countDiv.textContent = `${filteredImages.length} image(s) found`;
+
+    filteredImages.forEach(img => {
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'image-bank-item';
+      itemDiv.dataset.fileId = img.id;
+      itemDiv.dataset.fileName = img.name;
+
+      // Use thumbnail or placeholder; append access_token to avoid 403 on private thumbs
+      const imgElement = document.createElement('img');
+      const thumbSrc = img.thumbnailLink
+        ? appendAccessToken(img.thumbnailLink, cachedDriveTokens?.access_token)
+        : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>';
+      imgElement.src = thumbSrc;
+      imgElement.alt = img.name;
+      imgElement.loading = 'lazy';
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'image-bank-item-name';
+      nameDiv.textContent = img.displayLabel || `${img.age} ${img.color} ${img.action}`;
+
+      itemDiv.appendChild(imgElement);
+      itemDiv.appendChild(nameDiv);
+
+      // Click handler
+      itemDiv.addEventListener('click', () => handleImageClick(img));
+
+      imagesDiv.appendChild(itemDiv);
+    });
+  }
+
+  // Handle image click - download and replace
+  async function handleImageClick(img: ParsedImage): Promise<void> {
+    const itemDiv = document.querySelector(`[data-file-id="${img.id}"]`) as HTMLElement;
+    if (!itemDiv) return;
+
+    if (!cachedDriveTokens) {
+      statusDiv.style.display = 'block';
+      statusDiv.className = 'result error';
+      statusDiv.textContent = '❌ Connect to Google Drive and click "Load Image Bank" again.';
+      return;
+    }
+
+    if (!backendBaseUrl) {
+      statusDiv.style.display = 'block';
+      statusDiv.className = 'result error';
+      statusDiv.textContent = '❌ Backend URL not configured. Please load settings first.';
+      return;
+    }
+
+    // Show downloading state
+    const downloadingDiv = document.createElement('div');
+    downloadingDiv.className = 'image-bank-downloading';
+    downloadingDiv.innerHTML = '⏳';
+    itemDiv.appendChild(downloadingDiv);
+
+    statusDiv.style.display = 'block';
+    statusDiv.className = 'result';
+    statusDiv.style.background = '#eff6ff';
+    statusDiv.style.color = '#1e40af';
+    statusDiv.textContent = `📥 Downloading ${img.name}...`;
+
+    try {
+      // Download image from backend
+      const response = await fetch(
+        `${backendBaseUrl}/drive/image/${img.id}?tokens=${encodeURIComponent(JSON.stringify(cachedDriveTokens))}`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.base64) {
+        throw new Error('Invalid response from server');
+      }
+
+      // Send to plugin to replace image
+      postPluginMessage({
+        type: 'replace-current-image',
+        imageBase64: data.base64,
+        fileName: img.name
+      });
+
+      statusDiv.style.background = '#dcfce7';
+      statusDiv.style.color = '#166534';
+      statusDiv.textContent = `✅ Image replaced: ${img.name}`;
+
+      setTimeout(() => {
+        statusDiv.style.display = 'none';
+      }, 3000);
+
+    } catch (error) {
+      console.error('Image replacement error:', error);
+      statusDiv.style.background = '#fef2f2';
+      statusDiv.style.color = '#dc2626';
+      statusDiv.textContent = `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    } finally {
+      // Remove downloading indicator
+      if (downloadingDiv.parentNode) {
+        downloadingDiv.parentNode.removeChild(downloadingDiv);
+      }
+    }
+  }
+
+  // Load images from Drive
+  loadBtn.addEventListener('click', async () => {
+    // Persist what user typed before we fetch anything
+    try {
+      saveSettings();
+    } catch (err) {
+      console.log('Could not autosave settings before loading Image Bank:', err);
+    }
+
+    suppressSettingsRender = true;
+
+    loadingDiv.style.display = 'block';
+    gridDiv.style.display = 'none';
+    emptyDiv.style.display = 'none';
+    statusDiv.style.display = 'none';
+    loadBtn.disabled = true;
+
+    try {
+      const typedImageBankFolder = imageBankFolderInput.value.trim();
+
+      postPluginMessage({ type: 'load-settings' });
+      const settingsMsg = await waitForPluginMessageOnce('settings-loaded');
+      const imageBankFolder = typedImageBankFolder || (settingsMsg.imageBankFolder as string) || '';
+      backendBaseUrl = ((settingsMsg.backendUrl as string) || 'http://localhost:3000/api').trim() || 'http://localhost:3000/api';
+
+      if (!imageBankFolder.trim()) {
+        throw new Error('Image Bank folder not configured. Please set it in Settings.');
+      }
+
+      imageBankFolderId = imageBankFolder.trim();
+
+      postPluginMessage({ type: 'check-drive-tokens' });
+      const tokenMsg = await waitForPluginMessageOnce('drive-tokens-status');
+      const hasTokens = Boolean(tokenMsg.hasTokens);
+      const tokens = tokenMsg.tokens as any;
+
+      if (!hasTokens || !tokens) {
+        throw new Error('Google Drive not connected. Connect in Settings.');
+      }
+
+      cachedDriveTokens = tokens;
+
+      const response = await fetch(
+        `${backendBaseUrl}/drive/list-images?folderId=${encodeURIComponent(imageBankFolderId)}&tokens=${encodeURIComponent(JSON.stringify(cachedDriveTokens))}`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to load images: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.files) {
+        throw new Error(data.error || 'Invalid response from server');
+      }
+
+      if (data.refreshedTokens) {
+        cachedDriveTokens = data.refreshedTokens;
+        postPluginMessage({ type: 'save-drive-tokens', tokens: data.refreshedTokens });
+      }
+
+      // Parse filenames
+      allImages = data.files.map((file: any) => {
+        const parsed = parseFilename(file.name);
+        return {
+          id: file.id,
+          name: file.name,
+          thumbnailLink: file.thumbnailLink,
+          webViewLink: file.webViewLink,
+          ...parsed
+        };
+      }) as ParsedImage[];
+
+      if (allImages.length === 0) {
+        emptyDiv.style.display = 'block';
+        gridDiv.style.display = 'none';
+        statusDiv.style.display = 'block';
+        statusDiv.className = 'result';
+        statusDiv.textContent = 'ℹ️ No images found in Image Bank folder.';
+        return;
+      }
+
+      // Populate filters and render
+      populateFilters(allImages);
+      filteredImages = allImages;
+      renderImageGrid();
+      
+      statusDiv.style.display = 'block';
+      statusDiv.className = 'result success';
+      statusDiv.textContent = `✅ Loaded ${filteredImages.length} image(s) from Image Bank`;
+
+    } catch (error) {
+      console.error('Load images error:', error);
+      statusDiv.style.display = 'block';
+      statusDiv.className = 'result error';
+      statusDiv.textContent = `❌ ${error instanceof Error ? error.message : 'Unknown error'}`;
+      emptyDiv.style.display = allImages.length === 0 ? 'block' : 'none';
+    } finally {
+      loadingDiv.style.display = 'none';
+      loadBtn.disabled = false;
+      suppressSettingsRender = false;
+    }
+  });
+
+  function appendAccessToken(url: string, accessToken?: string): string {
+    if (!accessToken) return url;
+    try {
+      const parsed = new URL(url);
+      if (!parsed.searchParams.has('access_token')) {
+        parsed.searchParams.set('access_token', accessToken);
+      }
+      return parsed.toString();
+    } catch {
+      return url;
+    }
+  }
+
+  // Filter change listeners
+  filterAge.addEventListener('change', applyFilters);
+  filterColor.addEventListener('change', applyFilters);
+  filterAction.addEventListener('change', applyFilters);
 }

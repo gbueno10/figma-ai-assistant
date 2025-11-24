@@ -212,6 +212,7 @@ function initializeUiMessageHandler() {
       figma.ui.postMessage({
         type: 'drive-tokens-status',
         hasTokens: !!tokens,
+        tokens, // Make tokens available for Image Bank fetches
         folderId: folderId || ''
       });
       
@@ -283,8 +284,7 @@ function initializeUiMessageHandler() {
     } else if (msg.type === 'clear-drive-tokens') {
       // Clear tokens and folder ID from clientStorage
       await figma.clientStorage.deleteAsync('google_drive_tokens');
-      await figma.clientStorage.deleteAsync('google_drive_folder_id');
-      console.log('✅ Drive tokens cleared');
+      console.log('✅ Drive tokens cleared (folder IDs preserved)');
       
     } else if (msg.type === 'export-to-drive') {
       console.log('☁️ Starting bulk export to Google Drive...');
@@ -360,6 +360,92 @@ function initializeUiMessageHandler() {
           message: errorMessage
         });
       }
+    
+    } else if (msg.type === 'replace-current-image') {
+      console.log('🔄 Starting image replacement from Image Bank...');
+      const selection = figma.currentPage.selection;
+      
+      if (selection.length === 0) {
+        figma.notify('❌ Select a frame or image to replace.', { error: true });
+        figma.ui.postMessage({
+          type: 'error',
+          message: 'No element selected',
+          context: 'image-bank'
+        });
+        return;
+      }
+
+      const node = selection[0];
+      
+      // Check if node supports fills
+      if (!('fills' in node)) {
+        figma.notify('❌ Selected element does not support image fills.', { error: true });
+        figma.ui.postMessage({
+          type: 'error',
+          message: 'Selected element does not support fills',
+          context: 'image-bank'
+        });
+        return;
+      }
+
+      try {
+        // Convert base64 to Uint8Array without relying on atob (not available in plugin runtime)
+        const base64Data = msg.imageBase64;
+        const bytes = base64ToUint8Array(base64Data);
+
+        // Create image in Figma
+        const newImage = figma.createImage(bytes);
+        
+        // Get current fills
+        const fills = Array.isArray(node.fills) ? [...node.fills] : [];
+        const imageFillIndex = fills.findIndex((f: any) => f.type === 'IMAGE');
+        
+        // Create new image fill (preserving properties from old fill if exists)
+        let newFill: ImagePaint;
+        
+        if (imageFillIndex >= 0) {
+          const oldFill = fills[imageFillIndex] as ImagePaint;
+          // Preserve existing properties
+          newFill = {
+            type: 'IMAGE',
+            scaleMode: oldFill.scaleMode || 'FILL',
+            imageHash: newImage.hash,
+            ...(oldFill.imageTransform && { imageTransform: oldFill.imageTransform }),
+            ...(oldFill.scalingFactor !== undefined && { scalingFactor: oldFill.scalingFactor }),
+            ...(oldFill.rotation !== undefined && { rotation: oldFill.rotation }),
+            ...(oldFill.opacity !== undefined && { opacity: oldFill.opacity }),
+            ...(oldFill.visible !== undefined && { visible: oldFill.visible }),
+            ...(oldFill.blendMode && { blendMode: oldFill.blendMode }),
+          } as ImagePaint;
+          fills[imageFillIndex] = newFill;
+        } else {
+          // Create new fill if none existed
+          newFill = {
+            type: 'IMAGE',
+            scaleMode: 'FILL',
+            imageHash: newImage.hash,
+          } as ImagePaint;
+          fills.push(newFill);
+        }
+        
+        node.fills = fills as Paint[];
+        
+        figma.notify(`✅ Image replaced: ${msg.fileName}`, { timeout: 3000 });
+        figma.ui.postMessage({
+          type: 'image-replaced-success',
+          fileName: msg.fileName
+        });
+        
+      } catch (error) {
+        console.error('Image replacement error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        figma.notify(`❌ Failed to replace image: ${errorMessage}`, { error: true });
+        figma.ui.postMessage({
+          type: 'error',
+          message: errorMessage,
+          context: 'image-bank'
+        });
+      }
     }
   } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -383,6 +469,34 @@ function initializeUiMessageHandler() {
   }
 };
 
+}
+
+// Minimal base64 decoder that works in the Figma plugin sandbox (no atob/Buffer)
+function base64ToUint8Array(base64: string): Uint8Array {
+  const sanitized = (base64 || '').replace(/\s+/g, '').replace(/[^A-Za-z0-9+/=]/g, '');
+  const lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+  let padding = 0;
+  if (sanitized.endsWith('==')) padding = 2;
+  else if (sanitized.endsWith('=')) padding = 1;
+
+  const byteLength = (sanitized.length * 3) / 4 - padding;
+  const bytes = new Uint8Array(byteLength);
+
+  let byteIndex = 0;
+  for (let i = 0; i < sanitized.length; i += 4) {
+    const chunk =
+      (lookup.indexOf(sanitized[i] ?? '') << 18) |
+      (lookup.indexOf(sanitized[i + 1] ?? '') << 12) |
+      (lookup.indexOf(sanitized[i + 2] ?? '') << 6) |
+      lookup.indexOf(sanitized[i + 3] ?? '');
+
+    if (byteIndex < byteLength) bytes[byteIndex++] = (chunk >> 16) & 0xff;
+    if (byteIndex < byteLength) bytes[byteIndex++] = (chunk >> 8) & 0xff;
+    if (byteIndex < byteLength) bytes[byteIndex++] = chunk & 0xff;
+  }
+
+  return bytes;
 }
 
 function bootstrapSelectionState() {

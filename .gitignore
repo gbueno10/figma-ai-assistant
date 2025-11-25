@@ -16,7 +16,11 @@ backend/.env.production
 .env.production
 
 # Release artifacts (não precisa no git, só no GitHub Release)
-releases/*/figma-ai-assistant-plugin-*.zip
+releases/
+
+# Test scripts and payloads (manter local)
+test-*.js
+payload.json
 
 # Arquivos temporários de documentação (usar só localmente)
-CRIAR-DOCKERHUB-REPO.md
+docs/CRIAR-DOCKERHUB-REPO.md

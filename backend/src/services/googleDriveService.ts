@@ -15,15 +15,26 @@ export class GoogleDriveService {
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const redirectUri = process.env.GOOGLE_REDIRECT_URI;
 
-    if (!clientId || !clientSecret || !redirectUri) {
-      throw new Error('Missing Google OAuth2 credentials in environment variables');
-    }
-
+    // Initialize OAuth2 client even without credentials
+    // Methods that require credentials will throw specific errors
     this.oauth2Client = new google.auth.OAuth2(
-      clientId,
-      clientSecret,
-      redirectUri
+      clientId || 'dummy-client-id',
+      clientSecret || 'dummy-secret',
+      redirectUri || 'http://localhost:3000/oauth2callback'
     );
+  }
+  
+  /**
+   * Check if Google Drive is properly configured
+   */
+  private checkConfiguration() {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      throw new Error('Google Drive is not configured. Please set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI environment variables.');
+    }
   }
 
   /**
@@ -31,6 +42,7 @@ export class GoogleDriveService {
    * @param requestId Optional state parameter for the OAuth flow
    */
   getAuthUrl(requestId?: string): string {
+    this.checkConfiguration();
     const authUrl = this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: SCOPES,

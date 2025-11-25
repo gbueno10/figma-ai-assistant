@@ -831,7 +831,13 @@ const template = `
     </div>
 
     <!-- Filters -->
-    <div style="margin: 16px 0; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+    <div style="margin: 16px 0; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px;">
+      <div>
+        <label for="filterSource" style="display: block; font-size: 11px; color: #64748b; margin-bottom: 4px;">Source:</label>
+        <select id="filterSource" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12px;">
+          <option value="">All</option>
+        </select>
+      </div>
       <div>
         <label for="filterAge" style="display: block; font-size: 11px; color: #64748b; margin-bottom: 4px;">Age:</label>
         <select id="filterAge" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12px;">
@@ -893,6 +899,111 @@ type PluginToUiMessage = {
 let stylesInjected = false;
 let messageListenerRegistered = false;
 let suppressSettingsRender = false;
+
+// Upload Queue Manager (Global scope for message handlers)
+class UploadQueueManager {
+  private MAX_CONCURRENT_UPLOADS = 3;
+  private uploadQueue: Array<() => Promise<void>> = [];
+  private activeUploads = 0;
+  private completedUploads = 0;
+  private totalUploadsExpected = 0;
+  private failedUploads = 0;
+
+  reset(): void {
+    this.uploadQueue = [];
+    this.activeUploads = 0;
+    this.completedUploads = 0;
+    this.totalUploadsExpected = 0;
+    this.failedUploads = 0;
+  }
+
+  setTotalExpected(total: number): void {
+    this.totalUploadsExpected = total;
+    this.completedUploads = 0;
+    this.failedUploads = 0;
+  }
+
+  addToQueue(uploadTask: () => Promise<void>): void {
+    this.uploadQueue.push(uploadTask);
+    this.processQueue();
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.activeUploads >= this.MAX_CONCURRENT_UPLOADS || this.uploadQueue.length === 0) {
+      return;
+    }
+
+    this.activeUploads++;
+    const uploadTask = this.uploadQueue.shift();
+    
+    if (uploadTask) {
+      try {
+        await uploadTask();
+      } catch (error) {
+        console.error('Upload task error:', error);
+        this.failedUploads++;
+      } finally {
+        this.activeUploads--;
+        this.completedUploads++;
+        
+        // Update progress
+        this.updateProgress();
+        
+        // Process next in queue
+        this.processQueue();
+        
+        // Check if all uploads are complete
+        if (this.completedUploads === this.totalUploadsExpected && this.activeUploads === 0) {
+          this.finalizeExport();
+        }
+      }
+    }
+  }
+
+  private updateProgress(): void {
+    const driveExportStatus = document.getElementById('driveExportStatus') as HTMLDivElement;
+    if (driveExportStatus && this.totalUploadsExpected > 0) {
+      driveExportStatus.style.display = 'block';
+      driveExportStatus.style.background = '#dbeafe';
+      driveExportStatus.style.color = '#1e40af';
+      driveExportStatus.innerHTML = `⏳ Uploading: ${this.completedUploads}/${this.totalUploadsExpected} (${this.activeUploads} active)`;
+    }
+  }
+
+  private finalizeExport(): void {
+    const driveExportStatus = document.getElementById('driveExportStatus') as HTMLDivElement;
+    const exportToDriveBtn = document.getElementById('exportToDriveBtn') as HTMLButtonElement;
+    
+    if (exportToDriveBtn) {
+      exportToDriveBtn.disabled = false;
+    }
+    
+    if (driveExportStatus) {
+      const successCount = this.completedUploads - this.failedUploads;
+      
+      if (this.failedUploads === 0) {
+        driveExportStatus.style.background = '#f0fdf4';
+        driveExportStatus.style.color = '#059669';
+        driveExportStatus.innerHTML = `✅ ${successCount} frame(s) successfully exported to Google Drive!`;
+      } else {
+        driveExportStatus.style.background = '#fee2e2';
+        driveExportStatus.style.color = '#991b1b';
+        driveExportStatus.innerHTML = `⚠️ Exported ${successCount}/${this.totalUploadsExpected} frames. ${this.failedUploads} failed.`;
+      }
+    }
+    
+    console.log(`✅ Export complete: ${this.completedUploads - this.failedUploads} success, ${this.failedUploads} failed`);
+    
+    // Reset for next export
+    setTimeout(() => this.reset(), 3000);
+  }
+
+  recordFailure(): void {
+    this.failedUploads++;
+  }
+}
+
+const uploadQueueManager = new UploadQueueManager();
 
 export default function initUI(rootNode: HTMLElement): void {
   injectStyles();
@@ -995,7 +1106,8 @@ function initSettingsToggle(): void {
   settingsDisconnectBtn.addEventListener('click', () => {
     if (confirm('Disconnect from Google Drive? Your folder settings will be preserved.')) {
       postPluginMessage({ type: 'clear-drive-tokens' });
-      // Update UI will be handled by the drive-tokens-status message
+      // Update UI immediately
+      updateDriveStatusIndicator(false);
     }
   });
 }
@@ -1379,6 +1491,8 @@ function initExportToDrive(): void {
     console.log('🔌 Disconnecting from Google Drive...');
     postPluginMessage({ type: 'clear-drive-tokens' });
     showDisconnectedState();
+    // Update status indicator in Settings section
+    updateDriveStatusIndicator(false);
   });
   
   // Export to Drive button
@@ -1854,6 +1968,8 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       });
       
       driveUI.showConnectedState();
+      // Update status indicator in Settings section
+      updateDriveStatusIndicator(true);
       break;
     }
 
@@ -1879,11 +1995,10 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
         totalFrames: number;
       };
 
-      const driveExportStatus = getElement<HTMLDivElement>('driveExportStatus');
-      driveExportStatus.style.display = 'block';
-      driveExportStatus.style.background = '#dbeafe';
-      driveExportStatus.style.color = '#1e40af';
-      driveExportStatus.innerHTML = `⏳ Uploading ${currentIndex} of ${totalFrames}: ${frameName}...`;
+      // Set total expected uploads on first frame
+      if (currentIndex === 1) {
+        uploadQueueManager.setTotalExpected(totalFrames);
+      }
 
       // Convert Uint8Array to base64 (process in chunks to avoid stack overflow)
       let binaryString = '';
@@ -1894,21 +2009,29 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       }
       const imageBase64 = btoa(binaryString);
 
-      // Upload to backend
-      const backendUrl = getElement<HTMLInputElement>('backendUrl').value || 'http://localhost:3000/api';
-      
-      fetch(`${backendUrl}/drive/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tokens,
-          folderId,
-          fileName: `${frameName}.png`,
-          imageBase64
-        })
-      })
-        .then(res => res.json())
-        .then(data => {
+      // Create upload task (closure)
+      const uploadTask = async (): Promise<void> => {
+        const backendUrl = getElement<HTMLInputElement>('backendUrl').value || 'http://localhost:3000/api';
+        
+        try {
+          const res = await fetch(`${backendUrl}/drive/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tokens,
+              folderId,
+              fileName: `${frameName}.png`,
+              imageBase64
+            })
+          });
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({ message: res.statusText }));
+            throw new Error(errData.message || `HTTP ${res.status}: ${res.statusText}`);
+          }
+
+          const data = await res.json();
+          
           if (data.success) {
             console.log(`✅ Uploaded: ${frameName}`);
             
@@ -1921,7 +2044,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
               });
             }
             
-            // Notify plugin that this frame is done
+            // Notify plugin that this frame is done (optional, not blocking)
             postPluginMessage({
               type: 'drive-export-frame-complete',
               success: true,
@@ -1931,42 +2054,33 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
           } else {
             throw new Error(data.message || 'Upload failed');
           }
-        })
-        .catch(error => {
+        } catch (error: any) {
           console.error(`❌ Error uploading ${frameName}:`, error);
+          uploadQueueManager.recordFailure();
+          
+          // Notify plugin of failure (optional)
           postPluginMessage({
             type: 'drive-export-frame-complete',
             success: false,
             frameName,
             error: error.message
           });
-        });
+          
+          throw error; // Re-throw to be caught by queue manager
+        }
+      };
+
+      // Add to queue and start processing
+      uploadQueueManager.addToQueue(uploadTask);
       break;
     }
 
+    // DEPRECATED: No longer used with queue-based upload system
+    // The queue manager handles completion automatically
     case 'drive-export-complete': {
-      const { successCount, errorCount, totalFrames } = msg as unknown as {
-        successCount: number;
-        errorCount: number;
-        totalFrames: number;
-      };
-
-      const driveUI = (window as any).driveUI;
-      driveUI.enableExportButton();
-
-      if (errorCount === 0) {
-        driveUI.showExportStatus(
-          `✅ ${successCount} frame(s) successfully exported to Google Drive!`,
-          'success'
-        );
-      } else {
-        driveUI.showExportStatus(
-          `⚠️ Exported ${successCount}/${totalFrames} frames. ${errorCount} failed.`,
-          'error'
-        );
-      }
-      
-      console.log(`✅ Drive export complete: ${successCount} success, ${errorCount} errors`);
+      // Legacy handler - keeping for backward compatibility
+      // The upload queue manager now handles completion automatically
+      console.log('⚠️ Received legacy drive-export-complete message');
       break;
     }
 
@@ -2188,6 +2302,7 @@ function initImageBankBrowser(): void {
   const emptyDiv = getElement<HTMLDivElement>('imageBankEmpty');
   const statusDiv = getElement<HTMLDivElement>('imageBankStatus');
   const imageBankFolderInput = getElement<HTMLInputElement>('imageBankFolder');
+  const filterSource = getElement<HTMLSelectElement>('filterSource');
   const filterAge = getElement<HTMLSelectElement>('filterAge');
   const filterColor = getElement<HTMLSelectElement>('filterColor');
   const filterAction = getElement<HTMLSelectElement>('filterAction');
@@ -2197,6 +2312,7 @@ function initImageBankBrowser(): void {
     name: string;
     thumbnailLink?: string;
     webViewLink?: string;
+    source: string;
     age: string;
     color: string;
     action: string;
@@ -2230,82 +2346,230 @@ function initImageBankBrowser(): void {
     });
   }
 
-  // Parse filename according to convention: AI_dog_{age}_{color}_{action}.ext
-  function parseFilename(filename: string): { age: string; color: string; action: string; displayLabel: string; isStructured: boolean } {
-    // Remove extension
-    const nameWithoutExt = filename.replace(/\.(png|jpg|jpeg|gif|webp)$/i, '');
-    
-    // Split by underscore
-    const parts = nameWithoutExt.split('_');
-    
-    // Validate format: AI_dog_{age}_{color}_{action}
-    if (parts.length >= 5 && parts[0] === 'AI' && parts[1] === 'dog') {
+  // Parse filename according to convention: {ai/stock}_{puppy/dog}_{color}_{action}.ext
+  // Robust parsing that handles multi-word actions and edge cases
+  function parseFilename(filename: string): { source: string; age: string; color: string; action: string; displayLabel: string; isStructured: boolean } {
+    try {
+      console.log(`🔍 Parsing filename: "${filename}"`);
+      
+      // Remove extension
+      const nameWithoutExt = filename.replace(/\.(png|jpg|jpeg|gif|webp)$/i, '');
+      console.log(`  📝 Without extension: "${nameWithoutExt}"`);
+      
+      // Split by underscore
+      const parts = nameWithoutExt.split('_');
+      console.log(`  🔢 Parts:`, parts);
+      console.log(`  📊 Parts length: ${parts.length}, parts[0]: "${parts[0]}", parts[1]: "${parts[1]}"`);
+      
+      // Validate format: {ai/stock}_{puppy/dog/adult}_{color}_{action}
+      // Must have at least 4 parts: prefix_type_color_action
+      if (parts.length >= 4) {
+        const prefix = parts[0].toLowerCase();
+        const type = parts[1].toLowerCase();
+        
+        // Check if it matches the new convention
+        const validPrefixes = ['ai', 'stock'];
+        const validTypes = ['puppy', 'dog', 'adult'];
+        
+        if (validPrefixes.includes(prefix) && validTypes.includes(type)) {
+          // New format: {ai/stock}_{puppy/dog/adult}_{color}_{action}
+          const color = parts[2]?.trim() || 'unknown';
+          
+          // Action can be multi-word: join everything after index 3
+          // Example: ai_puppy_black_laying_down → "laying down"
+          const actionParts = parts.slice(3).filter(p => p.trim().length > 0);
+          const action = actionParts.length > 0 
+            ? actionParts.join(' ').trim() 
+            : 'unknown';
+          
+          // Map type to age-friendly label
+          // puppy → puppy, dog → adult, adult → adult
+          const age = type === 'puppy' ? 'puppy' : 'adult';
+          
+          const result = {
+            source: prefix.toLowerCase(),
+            age: age.toLowerCase(),
+            color: color.toLowerCase(),
+            action: action.toLowerCase(),
+            displayLabel: `${prefix.toUpperCase()} ${age} ${color} ${action}`,
+            isStructured: true
+          };
+          
+          console.log(`  ✅ Parsed successfully (new format):`, result);
+          return result;
+        }
+        
+        // Legacy format check: {age}_{color}_{action}
+        // This handles old files like "adult_black_sitting" or "puppy_brown_sitting"
+        const legacyType = parts[0].toLowerCase();
+        if (validTypes.includes(legacyType)) {
+          const age = legacyType === 'puppy' ? 'puppy' : 'adult';
+          const color = parts[1]?.trim() || 'unknown';
+          
+          // Action is everything after color
+          const actionParts = parts.slice(2).filter(p => p.trim().length > 0);
+          const action = actionParts.length > 0 
+            ? actionParts.join(' ').trim() 
+            : 'unknown';
+          
+          const result = {
+            source: 'unknown',
+            age: age.toLowerCase(),
+            color: color.toLowerCase(),
+            action: action.toLowerCase(),
+            displayLabel: `${age} ${color} ${action}`,
+            isStructured: true
+          };
+          
+          console.log(`  ✅ Parsed successfully (legacy format):`, result);
+          return result;
+        }
+        
+        // Another legacy check: starts with "adult" (e.g., "adult_black_sitting")
+        if (legacyType === 'adult') {
+          const color = parts[1]?.trim() || 'unknown';
+          const actionParts = parts.slice(2).filter(p => p.trim().length > 0);
+          const action = actionParts.length > 0 
+            ? actionParts.join(' ').trim() 
+            : 'unknown';
+          
+          const result = {
+            source: 'unknown',
+            age: 'adult',
+            color: color.toLowerCase(),
+            action: action.toLowerCase(),
+            displayLabel: `adult ${color} ${action}`,
+            isStructured: true
+          };
+          
+          console.log(`  ✅ Parsed successfully (adult legacy format):`, result);
+          return result;
+        }
+      }
+
+      // Fallback: include the file even if it doesn't match the convention
+      // This prevents losing files with non-standard names
+      console.log(`  ⚠️ Does not match convention, using fallback`);
       return {
-        age: parts[2] || 'unknown',
-        color: parts[3] || 'unknown',
-        action: parts[4] || 'unknown',
-        displayLabel: `${parts[2] || 'unknown'} ${parts[3] || 'unknown'} ${parts[4] || 'unknown'}`.trim(),
-        isStructured: true
+        source: 'unknown',
+        age: 'unknown',
+        color: 'unknown',
+        action: 'unknown',
+        displayLabel: nameWithoutExt,
+        isStructured: false
+      };
+    } catch (error) {
+      // Safety fallback for any parsing errors
+      console.warn(`❌ Failed to parse filename: ${filename}`, error);
+      return {
+        source: 'unknown',
+        age: 'unknown',
+        color: 'unknown',
+        action: 'unknown',
+        displayLabel: filename,
+        isStructured: false
       };
     }
-
-    // Fallback: include the file even if it doesn't match the convention
-    return {
-      age: 'unknown',
-      color: 'unknown',
-      action: 'unknown',
-      displayLabel: nameWithoutExt,
-      isStructured: false
-    };
   }
 
   // Populate filter options dynamically
+  // Only includes valid values, excludes "unknown"
   function populateFilters(images: ParsedImage[]): void {
+    console.log(`📊 Populating filters for ${images.length} images`);
+    
+    const sources = new Set<string>();
     const ages = new Set<string>();
     const colors = new Set<string>();
     const actions = new Set<string>();
 
     images.forEach(img => {
-      ages.add(img.age);
-      colors.add(img.color);
-      actions.add(img.action);
+      console.log(`  Image: ${img.name} → source:"${img.source}" age:"${img.age}" color:"${img.color}" action:"${img.action}"`);
+      
+      // Only add non-unknown values
+      if (img.source && img.source !== 'unknown') {
+        sources.add(img.source);
+        console.log(`    ✅ Added source: "${img.source}"`);
+      }
+      if (img.age && img.age !== 'unknown') {
+        ages.add(img.age);
+        console.log(`    ✅ Added age: "${img.age}"`);
+      }
+      if (img.color && img.color !== 'unknown') {
+        colors.add(img.color);
+        console.log(`    ✅ Added color: "${img.color}"`);
+      }
+      if (img.action && img.action !== 'unknown') {
+        actions.add(img.action);
+        console.log(`    ✅ Added action: "${img.action}"`);
+      }
     });
+
+    console.log(`📋 Final sets:`, { 
+      sources: Array.from(sources),
+      ages: Array.from(ages), 
+      colors: Array.from(colors), 
+      actions: Array.from(actions) 
+    });
+
+    // Helper to capitalize first letter
+    const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
+
+    // Clear and populate Source filter
+    filterSource.innerHTML = '<option value="">All</option>';
+    if (sources.size > 0) {
+      Array.from(sources).sort().forEach(source => {
+        const option = document.createElement('option');
+        option.value = source;
+        option.textContent = source.toUpperCase();
+        filterSource.appendChild(option);
+      });
+    }
 
     // Clear and populate Age filter
     filterAge.innerHTML = '<option value="">All</option>';
-    Array.from(ages).sort().forEach(age => {
-      const option = document.createElement('option');
-      option.value = age;
-      option.textContent = age.charAt(0).toUpperCase() + age.slice(1);
-      filterAge.appendChild(option);
-    });
+    if (ages.size > 0) {
+      Array.from(ages).sort().forEach(age => {
+        const option = document.createElement('option');
+        option.value = age;
+        option.textContent = capitalize(age);
+        filterAge.appendChild(option);
+      });
+    }
 
     // Clear and populate Color filter
     filterColor.innerHTML = '<option value="">All</option>';
-    Array.from(colors).sort().forEach(color => {
-      const option = document.createElement('option');
-      option.value = color;
-      option.textContent = color.charAt(0).toUpperCase() + color.slice(1);
-      filterColor.appendChild(option);
-    });
+    if (colors.size > 0) {
+      Array.from(colors).sort().forEach(color => {
+        const option = document.createElement('option');
+        option.value = color;
+        option.textContent = capitalize(color);
+        filterColor.appendChild(option);
+      });
+    }
 
     // Clear and populate Action filter
     filterAction.innerHTML = '<option value="">All</option>';
-    Array.from(actions).sort().forEach(action => {
-      const option = document.createElement('option');
-      option.value = action;
-      option.textContent = action.charAt(0).toUpperCase() + action.slice(1);
-      filterAction.appendChild(option);
-    });
+    if (actions.size > 0) {
+      Array.from(actions).sort().forEach(action => {
+        const option = document.createElement('option');
+        option.value = action;
+        option.textContent = capitalize(action);
+        filterAction.appendChild(option);
+      });
+    }
+
+    console.log(`✅ Filters populated: ${sources.size} sources, ${ages.size} ages, ${colors.size} colors, ${actions.size} actions`);
   }
 
   // Apply filters
   function applyFilters(): void {
+    const sourceFilter = filterSource.value;
     const ageFilter = filterAge.value;
     const colorFilter = filterColor.value;
     const actionFilter = filterAction.value;
 
     filteredImages = allImages.filter(img => {
+      if (sourceFilter && img.source !== sourceFilter) return false;
       if (ageFilter && img.age !== ageFilter) return false;
       if (colorFilter && img.color !== colorFilter) return false;
       if (actionFilter && img.action !== actionFilter) return false;
@@ -2451,6 +2715,16 @@ function initImageBankBrowser(): void {
     statusDiv.style.display = 'none';
     loadBtn.disabled = true;
 
+    // Show loading state in filters
+    filterSource.innerHTML = '<option value="">Loading...</option>';
+    filterSource.disabled = true;
+    filterAge.innerHTML = '<option value="">Loading...</option>';
+    filterAge.disabled = true;
+    filterColor.innerHTML = '<option value="">Loading...</option>';
+    filterColor.disabled = true;
+    filterAction.innerHTML = '<option value="">Loading...</option>';
+    filterAction.disabled = true;
+
     try {
       const typedImageBankFolder = imageBankFolderInput.value.trim();
 
@@ -2522,12 +2796,29 @@ function initImageBankBrowser(): void {
       filteredImages = allImages;
       renderImageGrid();
       
+      // Re-enable filters
+      filterSource.disabled = false;
+      filterAge.disabled = false;
+      filterColor.disabled = false;
+      filterAction.disabled = false;
+      
       statusDiv.style.display = 'block';
       statusDiv.className = 'result success';
       statusDiv.textContent = `✅ Loaded ${filteredImages.length} image(s) from Image Bank`;
 
     } catch (error) {
       console.error('Load images error:', error);
+      
+      // Reset filters on error
+      filterSource.innerHTML = '<option value="">All</option>';
+      filterSource.disabled = false;
+      filterAge.innerHTML = '<option value="">All</option>';
+      filterAge.disabled = false;
+      filterColor.innerHTML = '<option value="">All</option>';
+      filterColor.disabled = false;
+      filterAction.innerHTML = '<option value="">All</option>';
+      filterAction.disabled = false;
+      
       statusDiv.style.display = 'block';
       statusDiv.className = 'result error';
       statusDiv.textContent = `❌ ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -2553,6 +2844,7 @@ function initImageBankBrowser(): void {
   }
 
   // Filter change listeners
+  filterSource.addEventListener('change', applyFilters);
   filterAge.addEventListener('change', applyFilters);
   filterColor.addEventListener('change', applyFilters);
   filterAction.addEventListener('change', applyFilters);

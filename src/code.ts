@@ -1216,9 +1216,8 @@ async function handleExportToDrive(msg: any) {
     console.log(`☁️ Exporting ${frames.length} frame(s) to Google Drive...`);
     figma.notify(`📤 Exporting ${frames.length} frame(s)...`, { timeout: 2000 });
     
-    let successCount = 0;
-    let errorCount = 0;
-    
+    // Export all frames and send to UI without waiting for upload completion
+    // The UI will handle uploads with its queue system
     for (let i = 0; i < frames.length; i++) {
       const frame = frames[i];
       const frameName = frame.name;
@@ -1231,6 +1230,7 @@ async function handleExportToDrive(msg: any) {
         
         const frameData = Array.from(imageBytes);
         
+        // Send to UI for upload (non-blocking)
         figma.ui.postMessage({
           type: 'drive-export-frame',
           frameData,
@@ -1241,49 +1241,17 @@ async function handleExportToDrive(msg: any) {
           totalFrames: frames.length
         });
         
-        await new Promise<void>((resolve) => {
-          const handler = (msg: any) => {
-            if (msg.type === 'drive-export-frame-complete' && msg.frameName === frameName) {
-              figma.ui.off('message', handler);
-              
-              if (msg.success) {
-                successCount++;
-                console.log(`✅ ${frameName} uploaded`);
-              } else {
-                errorCount++;
-                console.error(`❌ ${frameName} failed`);
-              }
-              resolve();
-            }
-          };
-          
-          figma.ui.on('message', handler);
-          
-          setTimeout(() => {
-            figma.ui.off('message', handler);
-            errorCount++;
-            resolve();
-          }, 30000);
-        });
+        console.log(`✅ Exported frame ${i + 1}/${frames.length}: ${frameName}`);
         
       } catch (error) {
-        errorCount++;
         console.error(`❌ Error exporting ${frameName}:`, error);
       }
     }
     
-    figma.ui.postMessage({
-      type: 'drive-export-complete',
-      successCount,
-      errorCount,
-      totalFrames: frames.length
-    });
-    
-    const message = errorCount === 0
-      ? `✅ Exported ${successCount} frame(s)!`
-      : `⚠️ Exported ${successCount}/${frames.length} (${errorCount} failed)`;
-    
-    figma.notify(message, { timeout: 3000 });
+    // All frames have been exported and sent to UI
+    // The UI queue manager will handle the upload completion notification
+    console.log(`✅ All ${frames.length} frames exported. UI is handling uploads...`);
+    figma.notify(`✅ ${frames.length} frames exported. Uploading in progress...`, { timeout: 3000 });
     
   } catch (error) {
     console.error('❌ Export error:', error);

@@ -137,18 +137,36 @@ export class GoogleDriveService {
       this.oauth2Client.setCredentials({ access_token: accessToken });
       const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
 
-      // Query to list only images, not trashed, inside the specific folder
-      const response = await drive.files.list({
-        q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
-        fields: 'files(id, name, thumbnailLink, webViewLink, driveId)',
-        pageSize: 1000, // Should be sufficient for most use cases
-        orderBy: 'name', // Order alphabetically
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
-        corpora: 'allDrives',
-      });
+      let allFiles: any[] = [];
+      let pageToken: string | null | undefined = null;
 
-      return response.data.files || [];
+      // Loop through all pages to get ALL images
+      do {
+        const response: any = await drive.files.list({
+          q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
+          fields: 'nextPageToken, files(id, name, thumbnailLink, webViewLink, driveId)',
+          pageSize: 1000, // Max per page
+          pageToken: pageToken || undefined,
+          orderBy: 'name', // Order alphabetically
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+          corpora: 'allDrives',
+        });
+
+        if (response.data.files) {
+          allFiles.push(...response.data.files);
+        }
+
+        pageToken = response.data.nextPageToken;
+        
+        // Log progress for large folders
+        if (pageToken) {
+          console.log(`📄 Fetched ${allFiles.length} images so far, continuing...`);
+        }
+      } while (pageToken); // Continue while there are more pages
+
+      console.log(`✅ Total images found in Image Bank: ${allFiles.length}`);
+      return allFiles;
     } catch (error) {
       console.error('Error listing Image Bank files:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';

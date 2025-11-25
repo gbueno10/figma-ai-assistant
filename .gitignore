@@ -3,6 +3,11 @@ dist/
 *.log
 .DS_Store
 
+# Release packages (created by pack-plugin.sh)
+*.zip
+figma-ai-assistant-*.zip
+INSTALL.md
+
 # Webpack cache para builds mais rápidas
 .webpack_cache/
 node_modules/.cache/
@@ -15,7 +20,7 @@ backend/.env.production
 .env.local
 .env.production
 
-# Release artifacts (não precisa no git, só no GitHub Release)
+# Release packages (GitHub Releases only, not in source control)
 releases/
 
 # Test scripts and payloads (manter local)

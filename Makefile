@@ -130,6 +130,15 @@ dev: ## Start complete development environment
 	@make plugin-dev
 
 # ========================================
+# Release & Distribution
+# ========================================
+
+pack: plugin-build ## Create release package (zip)
+	@echo "$(BLUE)📦 Creating release package...$(NC)"
+	@./scripts/pack-plugin.sh
+	@echo "$(GREEN)✅ Release package ready!$(NC)"
+
+# ========================================
 # Testing & Quality
 # ========================================
 

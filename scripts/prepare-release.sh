@@ -69,10 +69,11 @@ EOF
 
 # 5. Copiar documentação
 echo "📚 Copiando documentação..."
-cp SETUP_FACIL.md "$RELEASE_DIR/docs/"
-cp QUICK_START.md "$RELEASE_DIR/docs/"
-cp DOCKER.md "$RELEASE_DIR/docs/"
-cp README.md "$RELEASE_DIR/docs/README-PROJECT.md"
+cp docs/SETUP_FACIL.md "$RELEASE_DIR/docs/" 2>/dev/null || true
+cp docs/QUICK_START.md "$RELEASE_DIR/docs/" 2>/dev/null || true
+cp docs/setup/DOCKER.md "$RELEASE_DIR/docs/" 2>/dev/null || true
+cp README.md "$RELEASE_DIR/docs/README-PROJECT.md" 2>/dev/null || true
+cp CHANGELOG.md "$RELEASE_DIR/docs/" 2>/dev/null || true
 
 # 6. Criar instruções completas
 cat > "$RELEASE_DIR/LEIA-ME-PRIMEIRO.md" << 'EOF'

@@ -500,6 +500,181 @@ button.secondary:hover {
   text-overflow: ellipsis;
 }
 
+/* Granular Image Editing Styles */
+.granular-image-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.granular-image-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 2px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.granular-image-card:hover {
+  border-color: #c7d2fe;
+  background: #fafbff;
+}
+
+.granular-image-card.selected {
+  border-color: #667eea;
+  background: #eef2ff;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.granular-image-preview {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #e2e8f0;
+  position: relative;
+}
+
+.granular-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.granular-image-preview .image-index {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.granular-image-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.granular-image-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.granular-image-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.granular-image-checkbox {
+  flex-shrink: 0;
+}
+
+.granular-image-checkbox input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.granular-image-prompt {
+  width: 100%;
+  min-height: 50px;
+  max-height: 80px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  background: white;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.granular-image-prompt:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.granular-image-prompt::placeholder {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.granular-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.granular-actions button {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.granular-select-all {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.granular-select-all label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  margin: 0;
+  cursor: pointer;
+}
+
+.granular-select-all input {
+  width: 16px;
+  height: 16px;
+  accent-color: #667eea;
+}
+
+.granular-image-count {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.granular-empty-state {
+  text-align: center;
+  padding: 24px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.granular-empty-state .icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
 .image-bank-downloading {
   position: absolute;
   top: 0;
@@ -727,6 +902,50 @@ const template = `
         <div class="progress-text" id="progressTextEditImages"></div>
       </div>
       <div id="resultEditImages"></div>
+    </div>
+
+    <div class="ai-card">
+      <div class="card-title">
+        🎯 Granular Image Generation
+      </div>
+      <div class="card-description">
+        Generate new images for each placeholder in a frame with individual prompts. Perfect for replacing multiple images with AI-generated content in one go.
+      </div>
+      <button type="button" id="analyzeFrameForGranularBtn">
+        🔍 Analyze Frame Images
+      </button>
+      
+      <div id="granularImageListContainer" style="display: none;">
+        <div class="granular-select-all">
+          <label>
+            <input type="checkbox" id="granularSelectAll" checked />
+            Select All Images
+          </label>
+          <span class="granular-image-count" id="granularImageCount">0 images</span>
+        </div>
+        
+        <div class="granular-image-list" id="granularImageList">
+          <!-- Image cards will be dynamically inserted here -->
+        </div>
+        
+        <div class="granular-actions">
+          <button type="button" id="executeGranularEditBtn" disabled>
+            🚀 Generate All Images
+          </button>
+          <button type="button" id="cancelGranularEditBtn" class="secondary">
+            ✕ Cancel
+          </button>
+        </div>
+      </div>
+      
+      <div class="loading" id="loadingGranularEdit">
+        ⏳ Generating images with individual prompts...
+        <div class="progress-container">
+          <div class="progress-bar" id="progressBarGranularEdit"></div>
+        </div>
+        <div class="progress-text" id="progressTextGranularEdit"></div>
+      </div>
+      <div id="resultGranularEdit"></div>
     </div>
 
   <div class="ai-card">
@@ -1014,6 +1233,7 @@ export default function initUI(rootNode: HTMLElement): void {
   initSettingsToggle();
   initImageGeneration();
   initImageEditing();
+  initGranularEditing();
   initAnalyze();
   initModify();
   initFrameIterator();
@@ -1293,6 +1513,202 @@ function initImageEditing(): void {
       apiKey
     });
   });
+}
+
+// Store granular edit data
+interface GranularImageData {
+  nodeId: string;
+  nodeName: string;
+  imageBase64: string;
+  customPrompt: string;
+  selected: boolean;
+}
+
+let granularImagesData: GranularImageData[] = [];
+
+function initGranularEditing(): void {
+  const analyzeBtn = getElement<HTMLButtonElement>('analyzeFrameForGranularBtn');
+  const listContainer = getElement<HTMLDivElement>('granularImageListContainer');
+  const imageList = getElement<HTMLDivElement>('granularImageList');
+  const selectAllCheckbox = getElement<HTMLInputElement>('granularSelectAll');
+  const imageCount = getElement<HTMLSpanElement>('granularImageCount');
+  const executeBtn = getElement<HTMLButtonElement>('executeGranularEditBtn');
+  const cancelBtn = getElement<HTMLButtonElement>('cancelGranularEditBtn');
+  
+  // Analyze frame for granular editing
+  analyzeBtn.addEventListener('click', () => {
+    console.log('🔍 Analyzing frame for granular editing...');
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = '⏳ Analyzing...';
+    
+    postPluginMessage({ type: 'analyze-frame-for-granular-edit' });
+  });
+  
+  // Select all checkbox handler
+  selectAllCheckbox.addEventListener('change', () => {
+    const isChecked = selectAllCheckbox.checked;
+    granularImagesData.forEach((img, idx) => {
+      img.selected = isChecked;
+      const checkbox = document.getElementById(`granular-checkbox-${idx}`) as HTMLInputElement;
+      const card = document.getElementById(`granular-card-${idx}`);
+      if (checkbox) checkbox.checked = isChecked;
+      if (card) {
+        if (isChecked) {
+          card.classList.add('selected');
+        } else {
+          card.classList.remove('selected');
+        }
+      }
+    });
+    updateExecuteButton();
+  });
+  
+  // Execute granular edit
+  executeBtn.addEventListener('click', () => {
+    const selectedImages = granularImagesData.filter(img => img.selected && img.customPrompt.trim());
+    
+    if (selectedImages.length === 0) {
+      showResult('Please select at least one image and provide a prompt.', 'error', 'resultGranularEdit');
+      return;
+    }
+    
+    const apiKey = getElement<HTMLInputElement>('apiKey').value.trim();
+    
+    if (!apiKey) {
+      console.log('⚠️ No API key provided; relying on backend configuration.');
+    }
+    
+    saveSettings();
+    
+    // Prepare tasks
+    const tasks = selectedImages.map(img => ({
+      nodeId: img.nodeId,
+      nodeName: img.nodeName,
+      imageBase64: img.imageBase64,
+      prompt: img.customPrompt.trim()
+    }));
+    
+    console.log(`🎯 Executing granular edit with ${tasks.length} task(s)`);
+    
+    // Show loading state
+    listContainer.style.display = 'none';
+    getElement<HTMLDivElement>('loadingGranularEdit').style.display = 'block';
+    getElement<HTMLDivElement>('resultGranularEdit').innerHTML = '';
+    
+    resetProgress(
+      'progressBarGranularEdit',
+      'progressTextGranularEdit',
+      `Processing ${tasks.length} image(s)...`
+    );
+    
+    postPluginMessage({
+      type: 'granular-image-edit',
+      tasks,
+      apiKey,
+      size: '1024x1024'
+    });
+  });
+  
+  // Cancel granular edit
+  cancelBtn.addEventListener('click', () => {
+    listContainer.style.display = 'none';
+    analyzeBtn.style.display = 'block';
+    granularImagesData = [];
+  });
+  
+  function updateExecuteButton(): void {
+    const hasSelectedWithPrompt = granularImagesData.some(img => img.selected && img.customPrompt.trim());
+    executeBtn.disabled = !hasSelectedWithPrompt;
+  }
+  
+  function renderGranularImageList(images: GranularImageData[]): void {
+    granularImagesData = images;
+    imageList.innerHTML = '';
+    
+    if (images.length === 0) {
+      imageList.innerHTML = `
+        <div class="granular-empty-state">
+          <div class="icon">🖼️</div>
+          <p>No images found in the selected frame.</p>
+        </div>
+      `;
+      executeBtn.disabled = true;
+      return;
+    }
+    
+    images.forEach((img, index) => {
+      const card = document.createElement('div');
+      card.className = 'granular-image-card selected';
+      card.id = `granular-card-${index}`;
+      
+      card.innerHTML = `
+        <div class="granular-image-preview">
+          <img src="data:image/png;base64,${img.imageBase64}" alt="${img.nodeName}" />
+          <span class="image-index">#${index + 1}</span>
+        </div>
+        <div class="granular-image-content">
+          <div class="granular-image-header">
+            <span class="granular-image-name" title="${img.nodeName}">${img.nodeName}</span>
+            <div class="granular-image-checkbox">
+              <input type="checkbox" id="granular-checkbox-${index}" checked />
+            </div>
+          </div>
+          <textarea 
+            class="granular-image-prompt" 
+            id="granular-prompt-${index}"
+            placeholder="Describe the new image to generate (e.g., 'A golden retriever playing in the park')..."
+          ></textarea>
+        </div>
+      `;
+      
+      imageList.appendChild(card);
+      
+      // Add event listeners
+      const checkbox = document.getElementById(`granular-checkbox-${index}`) as HTMLInputElement;
+      const textarea = document.getElementById(`granular-prompt-${index}`) as HTMLTextAreaElement;
+      
+      checkbox.addEventListener('change', () => {
+        granularImagesData[index].selected = checkbox.checked;
+        if (checkbox.checked) {
+          card.classList.add('selected');
+        } else {
+          card.classList.remove('selected');
+        }
+        
+        // Update select all checkbox
+        const allSelected = granularImagesData.every(i => i.selected);
+        const noneSelected = granularImagesData.every(i => !i.selected);
+        selectAllCheckbox.checked = allSelected;
+        selectAllCheckbox.indeterminate = !allSelected && !noneSelected;
+        
+        updateExecuteButton();
+      });
+      
+      textarea.addEventListener('input', () => {
+        granularImagesData[index].customPrompt = textarea.value;
+        updateExecuteButton();
+      });
+    });
+    
+    imageCount.textContent = `${images.length} image${images.length !== 1 ? 's' : ''}`;
+    selectAllCheckbox.checked = true;
+    selectAllCheckbox.indeterminate = false;
+    updateExecuteButton();
+  }
+  
+  // Expose render function globally for message handler
+  (window as any).renderGranularImageList = renderGranularImageList;
+  (window as any).resetGranularEditUI = () => {
+    listContainer.style.display = 'none';
+    analyzeBtn.style.display = 'block';
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = '🔍 Analyze Frame for Editing';
+    granularImagesData = [];
+  };
+  (window as any).showGranularImageList = () => {
+    analyzeBtn.style.display = 'none';
+    listContainer.style.display = 'block';
+  };
 }
 
 function initResize(): void {
@@ -1891,6 +2307,69 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
         </div>
       `;
       console.log('✅ Image editing completed');
+      break;
+    }
+
+    case 'granular-frame-analyzed': {
+      // Frame was analyzed, show the image list
+      const images = msg.images as Array<{
+        nodeId: string;
+        nodeName: string;
+        imageBase64: string;
+      }>;
+      
+      console.log(`🎯 Received ${images.length} images for granular editing`);
+      
+      // Reset analyze button
+      const analyzeBtn = getElement<HTMLButtonElement>('analyzeFrameForGranularBtn');
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = '🔍 Analyze Frame for Editing';
+      
+      if (images.length === 0) {
+        showResult('No images found in the selected frame.', 'error', 'resultGranularEdit');
+        return;
+      }
+      
+      // Transform and render images
+      const granularImages = images.map(img => ({
+        ...img,
+        customPrompt: '',
+        selected: true
+      }));
+      
+      (window as any).showGranularImageList();
+      (window as any).renderGranularImageList(granularImages);
+      break;
+    }
+
+    case 'granular-edit-progress': {
+      updateProgress('progressBarGranularEdit', 'progressTextGranularEdit', msg);
+      break;
+    }
+
+    case 'granular-edit-complete': {
+      getElement<HTMLDivElement>('loadingGranularEdit').style.display = 'none';
+      const resultDiv = getElement<HTMLDivElement>('resultGranularEdit');
+      resultDiv.innerHTML = `
+        <div class="result success">
+          ✅ ${(msg.message as string) || 'Granular editing completed successfully!'}
+        </div>
+      `;
+      (window as any).resetGranularEditUI();
+      console.log('✅ Granular editing completed');
+      break;
+    }
+
+    case 'granular-edit-error': {
+      getElement<HTMLDivElement>('loadingGranularEdit').style.display = 'none';
+      const resultDiv = getElement<HTMLDivElement>('resultGranularEdit');
+      resultDiv.innerHTML = `
+        <div class="result error">
+          ❌ ${(msg.message as string) || 'Granular editing failed.'}
+        </div>
+      `;
+      (window as any).resetGranularEditUI();
+      console.log('❌ Granular editing failed');
       break;
     }
 

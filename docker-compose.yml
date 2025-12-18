@@ -8,14 +8,15 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${FIGMA_AI_BACKEND_PORT:-3000}:3000"
-    env_file:
-      - ./backend/.env
     environment:
-      # Allow overriding via environment variables when needed
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - NODE_ENV=production
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - PORT=3000
       - CORS_ORIGIN=${CORS_ORIGIN:-}
-      - NODE_ENV=production
+      # Google Drive OAuth2 Configuration (required for Drive integration)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:3000/api/drive/callback}
     restart: unless-stopped
     networks:
       - figma-ai-network

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- 🎯 **Granular Image Editing**: Edit multiple images in a frame with individual prompts
+  - Analyze frame to extract all images with previews
+  - Assign custom AI prompts to each image
+  - Select/deselect specific images to edit
+  - Parallel processing with Promise.all for speed
+  - Frame duplication with Dogo naming convention
+- 📖 New documentation: `docs/GRANULAR-IMAGE-EDITING.md`
+
+### Technical
+- New message types: `analyze-frame-for-granular-edit`, `granular-image-edit`, `granular-frame-analyzed`, `granular-edit-progress`, `granular-edit-complete`, `granular-edit-error`
+- New functions in `code.ts`: `analyzeFrameForGranularEdit()`, `handleGranularImageEditing()`
+- New UI component `initGranularEditing()` with image card list
+- TypeScript interfaces for granular editing in `types.ts`
+
+---
+
 ## [1.3.1] - 2024-11-27
 
 ### Added

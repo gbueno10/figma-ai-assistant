@@ -196,6 +196,14 @@ function initializeUiMessageHandler() {
       console.log('🖼️ Starting frame image editing directly...');
       await executeFrameImageEditing(msg);
       
+    } else if (msg.type === 'analyze-frame-for-granular-edit') {
+      console.log('🔍 Analyzing frame for granular editing...');
+      await analyzeFrameForGranularEdit();
+      
+    } else if (msg.type === 'granular-image-edit') {
+      console.log('🎯 Starting granular image editing...');
+      await handleGranularImageEditing(msg);
+      
     } else if (msg.type === 'shuffle-elements') {
       console.log('🔀 Shuffling elements...');
       await FrameIteratorHandler.handleShuffleElements();
@@ -901,6 +909,248 @@ async function executeFrameImageEditing(msg: any) {
       context: 'image-edit'
     });
     figma.notify(`❌ Frame image editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
+  }
+}
+
+// Analyze frame and extract images for granular editing
+async function analyzeFrameForGranularEdit() {
+  try {
+    const selection = figma.currentPage.selection;
+    if (selection.length !== 1) {
+      figma.ui.postMessage({
+        type: 'error',
+        message: 'Please select exactly one frame for granular image editing',
+        context: 'granular-edit'
+      });
+      return;
+    }
+
+    const selectedNode = selection[0];
+    if (selectedNode.type !== 'FRAME') {
+      figma.ui.postMessage({
+        type: 'error',
+        message: 'Please select a Frame (not a group or other element)',
+        context: 'granular-edit'
+      });
+      return;
+    }
+
+    const imageNodes = findImageNodes(selectedNode);
+
+    if (imageNodes.length === 0) {
+      figma.ui.postMessage({
+        type: 'granular-frame-analyzed',
+        images: []
+      });
+      return;
+    }
+
+    console.log(`🔍 Found ${imageNodes.length} image(s) in frame: ${selectedNode.name}`);
+
+    // Extract image data for each node
+    const images: Array<{
+      nodeId: string;
+      nodeName: string;
+      imageBase64: string;
+    }> = [];
+
+    for (const node of imageNodes) {
+      try {
+        if ('fills' in node && node.fills && Array.isArray(node.fills)) {
+          const imageFill = node.fills.find((fill: any) => fill.type === 'IMAGE');
+          if (imageFill && imageFill.imageHash) {
+            const image = figma.getImageByHash(imageFill.imageHash);
+            if (image) {
+              const imageBytes = await image.getBytesAsync();
+              // Convert to base64
+              const base64 = figma.base64Encode(imageBytes);
+              
+              images.push({
+                nodeId: node.id,
+                nodeName: node.name,
+                imageBase64: base64
+              });
+              
+              console.log(`✅ Extracted image: ${node.name}`);
+            }
+          }
+        }
+      } catch (error) {
+        console.log(`⚠️ Failed to extract image from ${node.name}:`, error);
+      }
+    }
+
+    figma.ui.postMessage({
+      type: 'granular-frame-analyzed',
+      images
+    });
+
+    figma.notify(`✅ Found ${images.length} image(s) ready for editing`, { timeout: 3000 });
+  } catch (error) {
+    console.log('❌ Error analyzing frame for granular edit:', error);
+    figma.ui.postMessage({
+      type: 'error',
+      message: error instanceof Error ? error.message : 'Unknown error analyzing frame',
+      context: 'granular-edit'
+    });
+  }
+}
+
+// Handle granular image editing with individual prompts
+async function handleGranularImageEditing(msg: any) {
+  try {
+    const { tasks, apiKey, size } = msg;
+    
+    if (!tasks || tasks.length === 0) {
+      figma.ui.postMessage({
+        type: 'granular-edit-error',
+        message: 'No tasks provided for granular editing'
+      });
+      return;
+    }
+
+    // Get the source frame from the first task's node
+    const firstNode = await figma.getNodeByIdAsync(tasks[0].nodeId);
+    if (!firstNode) {
+      figma.ui.postMessage({
+        type: 'granular-edit-error',
+        message: 'Could not find the original image nodes'
+      });
+      return;
+    }
+
+    // Find the parent frame
+    let sourceFrame: FrameNode | null = null;
+    let currentNode: BaseNode | null = firstNode;
+    while (currentNode) {
+      if (currentNode.type === 'FRAME' && currentNode.parent?.type === 'PAGE') {
+        sourceFrame = currentNode as FrameNode;
+        break;
+      }
+      currentNode = currentNode.parent;
+    }
+
+    if (!sourceFrame) {
+      figma.ui.postMessage({
+        type: 'granular-edit-error',
+        message: 'Could not find parent frame for the images'
+      });
+      return;
+    }
+
+    console.log(`🎯 Starting granular edit on frame: ${sourceFrame.name} with ${tasks.length} task(s)`);
+
+    // Step 1: Duplicate the frame
+    figma.ui.postMessage({
+      type: 'granular-edit-progress',
+      message: 'Duplicating frame with Dogo naming...',
+      step: 1,
+      totalSteps: 3
+    });
+
+    const { duplicateFrameWithDogoNaming, findCorrespondingNode } = await import('./utils/figmaUtils');
+    const duplicatedFrame = duplicateFrameWithDogoNaming(sourceFrame);
+    console.log(`✅ Frame duplicated: ${duplicatedFrame.name}`);
+
+    // Select the duplicated frame
+    figma.currentPage.selection = [duplicatedFrame];
+
+    // Step 2: Process each task with its individual prompt
+    figma.ui.postMessage({
+      type: 'granular-edit-progress',
+      message: `Generating ${tasks.length} new image(s) in parallel...`,
+      step: 2,
+      totalSteps: 3
+    });
+
+    const { ImageGenerationService } = await import('./services/imageGenerationService');
+
+    const editingPromises = tasks.map(async (task: any, index: number) => {
+      try {
+        const originalNode = await figma.getNodeByIdAsync(task.nodeId);
+        if (!originalNode) {
+          console.log(`⚠️ Could not find original node: ${task.nodeId}`);
+          return { success: false, nodeId: task.nodeId, error: 'Original node not found' };
+        }
+
+        // Find corresponding node in duplicated frame
+        const targetNode = findCorrespondingNode(originalNode as SceneNode, duplicatedFrame);
+        if (!targetNode) {
+          console.log(`⚠️ Could not find corresponding node for: ${task.nodeName}`);
+          return { success: false, nodeId: task.nodeId, error: 'Corresponding node not found' };
+        }
+
+        console.log(`🖼️ [GRANULAR ${index + 1}/${tasks.length}] Generating new image for: ${task.nodeName}`);
+        console.log(`   Prompt: "${task.prompt.substring(0, 50)}..."`);
+
+        // Call backend to GENERATE new image (not edit) with individual prompt
+        const generatedImageBytes = await ImageGenerationService.generateImageAsBase64(
+          task.prompt, // Individual prompt for this image!
+          apiKey,
+          size,
+          false // not transparent
+        );
+
+        return { success: true, targetNode, editedImageBytes: generatedImageBytes, nodeName: task.nodeName, error: null };
+      } catch (error) {
+        console.log(`❌ [GRANULAR] Error editing ${task.nodeName}:`, error);
+        return { 
+          success: false, 
+          nodeId: task.nodeId, 
+          nodeName: task.nodeName,
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
+    });
+
+    const results = await Promise.all(editingPromises);
+
+    // Step 3: Apply edited images
+    figma.ui.postMessage({
+      type: 'granular-edit-progress',
+      message: 'Applying edited images to Figma...',
+      step: 3,
+      totalSteps: 3
+    });
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const result of results) {
+      if (result.success && result.editedImageBytes && result.targetNode) {
+        try {
+          await ImageGenerationService.replaceImageInFigma(result.targetNode, result.editedImageBytes);
+          successCount++;
+          console.log(`✅ [APPLY] Applied edited image to: ${result.nodeName}`);
+        } catch (error) {
+          console.log(`❌ [APPLY] Failed to apply: ${result.nodeName}`, error);
+          errorCount++;
+        }
+      } else {
+        console.log(`❌ [RESULT] Failed: ${result.nodeName || result.nodeId} - ${result.error}`);
+        errorCount++;
+      }
+    }
+
+    const message = errorCount > 0
+      ? `Generated ${successCount}/${tasks.length} image(s) (${errorCount} failed)`
+      : `Successfully generated all ${successCount} new image(s)!`;
+
+    figma.ui.postMessage({
+      type: 'granular-edit-complete',
+      message
+    });
+
+    figma.notify(`✅ ${message}`, { timeout: 3000 });
+    console.log(`🎉 Granular editing complete: ${successCount} success, ${errorCount} errors`);
+
+  } catch (error) {
+    console.log('❌ Granular image editing error:', error);
+    figma.ui.postMessage({
+      type: 'granular-edit-error',
+      message: error instanceof Error ? error.message : 'Unknown error during granular editing'
+    });
+    figma.notify(`❌ Granular editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { timeout: 5000 });
   }
 }
 

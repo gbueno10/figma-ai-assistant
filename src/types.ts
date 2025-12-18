@@ -72,3 +72,44 @@ export interface AIOptimizedData {
     requestedImprovements: string[];
   };
 }
+
+// Granular Image Editing Types
+export interface GranularEditTask {
+  nodeId: string;
+  nodeName: string;
+  imageBase64: string;
+  prompt: string;
+}
+
+export interface GranularEditMessage {
+  type: 'granular-image-edit';
+  tasks: GranularEditTask[];
+  apiKey?: string;
+  size?: string;
+}
+
+export interface GranularFrameAnalyzedMessage {
+  type: 'granular-frame-analyzed';
+  images: Array<{
+    nodeId: string;
+    nodeName: string;
+    imageBase64: string;
+  }>;
+}
+
+export interface GranularEditProgressMessage {
+  type: 'granular-edit-progress';
+  message: string;
+  step: number;
+  totalSteps: number;
+}
+
+export interface GranularEditCompleteMessage {
+  type: 'granular-edit-complete';
+  message: string;
+}
+
+export interface GranularEditErrorMessage {
+  type: 'granular-edit-error';
+  message: string;
+}

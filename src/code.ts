@@ -26,456 +26,460 @@ export default function runPlugin() {
 
 function initializeUiMessageHandler() {
   figma.ui.onmessage = async (msg) => {
-  console.log('Message received from UI:', msg);
-  
-  try {
-    if (msg.type === 'capture-and-analyze') {
-      console.log('Starting analysis...');
-      
-      // Verifica se há frame selecionado
-      const selection = figma.currentPage.selection;
-      if (selection.length === 0) {
-        figma.notify('❌ Select a frame first!', { timeout: 3000 });
-        figma.ui.postMessage({
-          type: 'error',
-          message: 'No frame selected'
-        });
-        return;
-      }
-      
-      if (selection[0].type !== 'FRAME') {
-        figma.notify('❌ Please, select a frame (not a group or other element)!', { timeout: 3000 });
-        figma.ui.postMessage({
-          type: 'error', 
-          message: 'Selected element is not a frame'
-        });
-        return;
-      }
-      
-      console.log('Valid frame found:', selection[0].name);
-      
-      // Captura screenshot
-      const screenshot = await aiAssistant.captureScreenshot();
-      console.log('Screenshot captured');
-      
-      // Gera JSON estruturado para IA (somente dados do Figma)
-      const structuredData = aiAssistant.generateAIOptimizedJSON();
-      console.log('Structured JSON generated (Figma data only)');
-      
-      // Retorna resultado para UI (sem contexto extra da IA)
-      figma.ui.postMessage({
-        type: 'analysis-complete',
-        screenshot,
-        structuredData
-      });
-      
-      figma.notify('✅ Analysis complete! Structured JSON generated.', { timeout: 3000 });
-      
-    } else if (msg.type === 'apply-suggestion') {
-      await aiAssistant.applySuggestion(msg.suggestion);
-      
-    } else if (msg.type === 'export-json') {
-      // Gera e exporta JSON estruturado
-      const structuredData = aiAssistant.generateAIOptimizedJSON();
-      
-      figma.ui.postMessage({
-        type: 'json-exported',
-        data: structuredData
-      });
-      
-      figma.notify('📄 Structured JSON generated! Copied to clipboard.', { timeout: 3000 });
-      
-    } else if (msg.type === 'cancel') {
-      figma.closePlugin();
-    } else if (msg.type === 'modify-design') {
-      await DesignModificationHandler.handleDesignModification(msg.prompt, msg.types, msg.apiKey);
-    
-    } else if (msg.type === 'analyze-design-only') {
-      console.log('📊 Starting design analysis only...');
-      
-      // Verifica se há elementos selecionados
-      const selection = figma.currentPage.selection;
-      if (selection.length === 0) {
-        figma.notify('❌ Select at least one element first!', { timeout: 3000 });
-        figma.ui.postMessage({
-          type: 'error',
-          message: 'No elements selected'
-        });
-        return;
-      }
-      
-      console.log('📊 Analyzing selected elements:', selection.length);
-      
-      // Importa o handler para usar o método de análise
-      const { DesignModificationHandler } = await import('./handlers/designModificationHandler');
-      
-      // Analisa os elementos selecionados (usando todos os tipos para debug)
-      const designAnalysis = await DesignModificationHandler.analyzeDesignForModification(selection, ['text', 'color', 'layout', 'style']);
-      
-      // Retorna os dados de análise para a UI
-      figma.ui.postMessage({
-        type: 'design-analysis-complete',
-        analysisData: designAnalysis
-      });
-      
-      figma.notify('📊 Design analysis completed! Check the JSON output.', { timeout: 3000 });
-      
-    } else if (msg.type === 'load-settings') {
-      try {
-        const apiKey = (await figma.clientStorage.getAsync(API_KEY_STORAGE_KEY)) || '';
-        const storedBackendUrl =
-          (await figma.clientStorage.getAsync(BACKEND_URL_STORAGE_KEY)) || DEFAULT_BACKEND_BASE_URL;
-        const normalizedUrl = setBackendBaseUrl(storedBackendUrl);
-        const exportsFolder = (await figma.clientStorage.getAsync(EXPORTS_FOLDER_STORAGE_KEY)) || '';
-        const imageBankFolder = (await figma.clientStorage.getAsync(IMAGE_BANK_FOLDER_STORAGE_KEY)) || '';
+    console.log('Message received from UI:', msg);
 
-        figma.ui.postMessage({
-          type: 'settings-loaded',
-          apiKey,
-          backendUrl: normalizedUrl,
-          exportsFolder,
-          imageBankFolder
-        });
-        
-        console.log('✅ Settings loaded from storage');
-      } catch (error) {
-        console.log('❌ Error loading settings:', error);
-      }
-    
-    } else if (msg.type === 'save-settings') {
-      try {
-        await figma.clientStorage.setAsync(API_KEY_STORAGE_KEY, msg.apiKey || '');
-        
-        const normalizedUrl = setBackendBaseUrl(msg.backendUrl);
-        await figma.clientStorage.setAsync(BACKEND_URL_STORAGE_KEY, normalizedUrl);
-        console.log(`✅ Backend URL saved: ${normalizedUrl}`);
+    try {
+      if (msg.type === 'capture-and-analyze') {
+        console.log('Starting analysis...');
 
-        await figma.clientStorage.setAsync(EXPORTS_FOLDER_STORAGE_KEY, msg.exportsFolder || '');
-        await figma.clientStorage.setAsync(IMAGE_BANK_FOLDER_STORAGE_KEY, msg.imageBankFolder || '');
-        console.log(`✅ Folders saved: Exports=${msg.exportsFolder || 'none'}, Image Bank=${msg.imageBankFolder || 'none'}`);
-
-        console.log('✅ Settings saved to storage');
-      } catch (error) {
-        console.log('❌ Error saving settings:', error);
-      }
-    
-    } else if (msg.type === 'check-image-selection') {
-      console.log('🖼️ Checking image selection...');
-      
-      const selection = figma.currentPage.selection;
-      const imageNodes = selection.filter(node => {
-        if ('fills' in node && node.fills && Array.isArray(node.fills)) {
-          return node.fills.some(fill => fill.type === 'IMAGE');
-        }
-        return false;
-      });
-      
-      figma.ui.postMessage({
-        type: 'image-selection-checked',
-        hasImages: imageNodes.length > 0,
-        count: imageNodes.length
-      });
-      
-    } else if (msg.type === 'generate-image') {
-      console.log('✨ Starting new image generation...');
-      await handleImageGeneration(msg, false);
-      
-    } else if (msg.type === 'regenerate-images') {
-      console.log('🔄 Starting image regeneration...');
-      await handleImageGeneration(msg, true);
-      
-    } else if (msg.type === 'resize-frame-stretch') {
-      console.log(`📏 Starting frame stretch to height: ${msg.newHeight}`);
-      await handleFrameStretch(Number(msg.newHeight));
-      
-    } else if (msg.type === 'resize-frame-reflow') {
-      console.log(`📏 Starting frame reflow to height: ${msg.newHeight}`);
-      await handleFrameReflow(Number(msg.newHeight));
-      
-    } else if (msg.type === 'edit-frame-images') {
-      console.log('🖼️ Starting frame image editing directly...');
-      await executeFrameImageEditing(msg);
-      
-    } else if (msg.type === 'analyze-frame-for-granular-edit') {
-      console.log('🔍 Analyzing frame for granular editing...');
-      await analyzeFrameForGranularEdit();
-      
-    } else if (msg.type === 'granular-image-edit') {
-      console.log('🎯 Starting granular image editing...');
-      await handleGranularImageEditing(msg);
-      
-    } else if (msg.type === 'shuffle-elements') {
-      console.log('🔀 Shuffling elements...');
-      await FrameIteratorHandler.handleShuffleElements();
-
-    } else if (msg.type === 'generate-spotlight') {
-      console.log('👑 Generating spotlight variations...');
-      await FrameIteratorHandler.handleGenerateSpotlight();
-      
-    } else if (msg.type === 'check-drive-tokens') {
-      // Check if tokens exist in clientStorage
-      const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
-      const folderId = await figma.clientStorage.getAsync('google_drive_folder_id');
-      
-      figma.ui.postMessage({
-        type: 'drive-tokens-status',
-        hasTokens: !!tokens,
-        tokens, // Make tokens available for Image Bank fetches
-        folderId: folderId || ''
-      });
-      
-    } else if (msg.type === 'get-drive-auth-url') {
-      // Fetch auth URL from backend
-      const requestId = msg.requestId;
-      const backendUrl = getBackendBaseUrl();
-      
-      try {
-        const response = await fetch(`${backendUrl}/drive/auth-url?requestId=${requestId}`);
-        const data = await response.json();
-        
-        if (data.authUrl) {
+        // Verifica se há frame selecionado
+        const selection = figma.currentPage.selection;
+        if (selection.length === 0) {
+          figma.notify('❌ Select a frame first!', { timeout: 3000 });
           figma.ui.postMessage({
-            type: 'auth-url-ready',
-            url: data.authUrl,
-            requestId: requestId
+            type: 'error',
+            message: 'No frame selected'
           });
-        } else {
-          throw new Error('No auth URL received');
+          return;
         }
-      } catch (error) {
-        console.error('Error getting auth URL:', error);
-        figma.ui.postMessage({
-          type: 'auth-status-error',
-          message: error instanceof Error ? error.message : 'Failed to get auth URL'
-        });
-      }
-      
-    } else if (msg.type === 'check-drive-auth-status') {
-      // Poll backend for auth status
-      const requestId = msg.requestId;
-      const backendUrl = getBackendBaseUrl();
-      
-      try {
-        const response = await fetch(`${backendUrl}/drive/check-status?requestId=${requestId}`);
-        const data = await response.json();
-        
-        if (data.status === 'success' && data.tokens) {
+
+        if (selection[0].type !== 'FRAME') {
+          figma.notify('❌ Please, select a frame (not a group or other element)!', { timeout: 3000 });
           figma.ui.postMessage({
-            type: 'auth-status-success',
-            tokens: data.tokens
+            type: 'error',
+            message: 'Selected element is not a frame'
           });
-        } else if (data.status === 'error') {
+          return;
+        }
+
+        console.log('Valid frame found:', selection[0].name);
+
+        // Captura screenshot
+        const screenshot = await aiAssistant.captureScreenshot();
+        console.log('Screenshot captured');
+
+        // Gera JSON estruturado para IA (somente dados do Figma)
+        const structuredData = aiAssistant.generateAIOptimizedJSON();
+        console.log('Structured JSON generated (Figma data only)');
+
+        // Retorna resultado para UI (sem contexto extra da IA)
+        figma.ui.postMessage({
+          type: 'analysis-complete',
+          screenshot,
+          structuredData
+        });
+
+        figma.notify('✅ Analysis complete! Structured JSON generated.', { timeout: 3000 });
+
+      } else if (msg.type === 'apply-suggestion') {
+        await aiAssistant.applySuggestion(msg.suggestion);
+
+      } else if (msg.type === 'export-json') {
+        // Gera e exporta JSON estruturado
+        const structuredData = aiAssistant.generateAIOptimizedJSON();
+
+        figma.ui.postMessage({
+          type: 'json-exported',
+          data: structuredData
+        });
+
+        figma.notify('📄 Structured JSON generated! Copied to clipboard.', { timeout: 3000 });
+
+      } else if (msg.type === 'cancel') {
+        figma.closePlugin();
+      } else if (msg.type === 'modify-design') {
+        await DesignModificationHandler.handleDesignModification(msg.prompt, msg.types, msg.apiKey);
+
+      } else if (msg.type === 'analyze-design-only') {
+        console.log('📊 Starting design analysis only...');
+
+        // Verifica se há elementos selecionados
+        const selection = figma.currentPage.selection;
+        if (selection.length === 0) {
+          figma.notify('❌ Select at least one element first!', { timeout: 3000 });
+          figma.ui.postMessage({
+            type: 'error',
+            message: 'No elements selected'
+          });
+          return;
+        }
+
+        console.log('📊 Analyzing selected elements:', selection.length);
+
+        // Importa o handler para usar o método de análise
+        const { DesignModificationHandler } = await import('./handlers/designModificationHandler');
+
+        // Analisa os elementos selecionados (usando todos os tipos para debug)
+        const designAnalysis = await DesignModificationHandler.analyzeDesignForModification(selection, ['text', 'color', 'layout', 'style']);
+
+        // Retorna os dados de análise para a UI
+        figma.ui.postMessage({
+          type: 'design-analysis-complete',
+          analysisData: designAnalysis
+        });
+
+        figma.notify('📊 Design analysis completed! Check the JSON output.', { timeout: 3000 });
+
+      } else if (msg.type === 'load-settings') {
+        try {
+          const apiKey = (await figma.clientStorage.getAsync(API_KEY_STORAGE_KEY)) || '';
+          const storedBackendUrl =
+            (await figma.clientStorage.getAsync(BACKEND_URL_STORAGE_KEY)) || DEFAULT_BACKEND_BASE_URL;
+          const normalizedUrl = setBackendBaseUrl(storedBackendUrl);
+          const exportsFolder = (await figma.clientStorage.getAsync(EXPORTS_FOLDER_STORAGE_KEY)) || '';
+          const imageBankFolder = (await figma.clientStorage.getAsync(IMAGE_BANK_FOLDER_STORAGE_KEY)) || '';
+
+          figma.ui.postMessage({
+            type: 'settings-loaded',
+            apiKey,
+            backendUrl: normalizedUrl,
+            exportsFolder,
+            imageBankFolder
+          });
+
+          console.log('✅ Settings loaded from storage');
+        } catch (error) {
+          console.log('❌ Error loading settings:', error);
+        }
+
+      } else if (msg.type === 'save-settings') {
+        try {
+          await figma.clientStorage.setAsync(API_KEY_STORAGE_KEY, msg.apiKey || '');
+
+          const normalizedUrl = setBackendBaseUrl(msg.backendUrl);
+          await figma.clientStorage.setAsync(BACKEND_URL_STORAGE_KEY, normalizedUrl);
+          console.log(`✅ Backend URL saved: ${normalizedUrl}`);
+
+          await figma.clientStorage.setAsync(EXPORTS_FOLDER_STORAGE_KEY, msg.exportsFolder || '');
+          await figma.clientStorage.setAsync(IMAGE_BANK_FOLDER_STORAGE_KEY, msg.imageBankFolder || '');
+          console.log(`✅ Folders saved: Exports=${msg.exportsFolder || 'none'}, Image Bank=${msg.imageBankFolder || 'none'}`);
+
+          console.log('✅ Settings saved to storage');
+        } catch (error) {
+          console.log('❌ Error saving settings:', error);
+        }
+
+      } else if (msg.type === 'check-image-selection') {
+        console.log('🖼️ Checking image selection...');
+
+        const selection = figma.currentPage.selection;
+        const imageNodes = selection.filter(node => {
+          if ('fills' in node && node.fills && Array.isArray(node.fills)) {
+            return node.fills.some(fill => fill.type === 'IMAGE');
+          }
+          return false;
+        });
+
+        figma.ui.postMessage({
+          type: 'image-selection-checked',
+          hasImages: imageNodes.length > 0,
+          count: imageNodes.length
+        });
+
+      } else if (msg.type === 'generate-image') {
+        console.log('✨ Starting new image generation...');
+        await handleImageGeneration(msg, false);
+
+      } else if (msg.type === 'regenerate-images') {
+        console.log('🔄 Starting image regeneration...');
+        await handleImageGeneration(msg, true);
+
+      } else if (msg.type === 'resize-frame-stretch') {
+        console.log(`📏 Starting frame stretch to height: ${msg.newHeight}`);
+        await handleFrameStretch(Number(msg.newHeight));
+
+      } else if (msg.type === 'resize-frame-reflow') {
+        console.log(`📏 Starting frame reflow to height: ${msg.newHeight}`);
+        await handleFrameReflow(Number(msg.newHeight));
+
+      } else if (msg.type === 'edit-frame-images') {
+        console.log('🖼️ Starting frame image editing directly...');
+        await executeFrameImageEditing(msg);
+
+      } else if (msg.type === 'analyze-frame-for-granular-edit') {
+        console.log('🔍 Analyzing frame for granular editing...');
+        await analyzeFrameForGranularEdit();
+
+      } else if (msg.type === 'granular-image-edit') {
+        console.log('🎯 Starting granular image editing...');
+        await handleGranularImageEditing(msg);
+
+      } else if (msg.type === 'shuffle-elements') {
+        console.log('🔀 Shuffling elements...');
+        await FrameIteratorHandler.handleShuffleElements();
+
+      } else if (msg.type === 'generate-spotlight') {
+        console.log('👑 Generating spotlight variations...');
+        await FrameIteratorHandler.handleGenerateSpotlight();
+
+      } else if (msg.type === 'check-drive-tokens') {
+        // Check if tokens exist in clientStorage
+        const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
+        const folderId = await figma.clientStorage.getAsync('google_drive_folder_id');
+
+        figma.ui.postMessage({
+          type: 'drive-tokens-status',
+          hasTokens: !!tokens,
+          tokens, // Make tokens available for Image Bank fetches
+          folderId: folderId || ''
+        });
+
+      } else if (msg.type === 'get-drive-auth-url') {
+        // Fetch auth URL from backend
+        const requestId = msg.requestId;
+        const backendUrl = getBackendBaseUrl();
+
+        try {
+          const response = await fetch(`${backendUrl}/drive/auth-url?requestId=${requestId}`);
+          const data = await response.json();
+
+          if (data.authUrl) {
+            figma.ui.postMessage({
+              type: 'auth-url-ready',
+              url: data.authUrl,
+              requestId: requestId
+            });
+          } else {
+            throw new Error('No auth URL received');
+          }
+        } catch (error) {
+          console.error('Error getting auth URL:', error);
           figma.ui.postMessage({
             type: 'auth-status-error',
-            message: data.error || 'Authentication failed'
+            message: error instanceof Error ? error.message : 'Failed to get auth URL'
           });
         }
-        // If pending, UI will continue polling
-      } catch (error) {
-        console.error('Error checking auth status:', error);
-        figma.ui.postMessage({
-          type: 'auth-status-error',
-          message: error instanceof Error ? error.message : 'Failed to check auth status'
-        });
-      }
-      
-    } else if (msg.type === 'save-drive-tokens') {
-      // Save tokens to clientStorage
-      await figma.clientStorage.setAsync('google_drive_tokens', msg.tokens);
-      console.log('✅ Tokens saved to clientStorage');
-      
-    } else if (msg.type === 'save-drive-folder-id') {
-      // Save folder ID to clientStorage
-      await figma.clientStorage.setAsync('google_drive_folder_id', msg.folderId);
-      console.log('✅ Folder ID saved to clientStorage');
-      
-    } else if (msg.type === 'clear-drive-tokens') {
-      // Clear tokens and folder ID from clientStorage
-      await figma.clientStorage.deleteAsync('google_drive_tokens');
-      console.log('✅ Drive tokens cleared (folder IDs preserved)');
-      
-    } else if (msg.type === 'export-to-drive') {
-      console.log('☁️ Starting bulk export to Google Drive...');
-      await handleExportToDrive(msg);
-    
-    } else if (msg.type === 'auto-upload-to-drive') {
-      console.log('☁️ Starting auto-upload to Google Drive...');
-      const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
-      const imageBankFolder = await figma.clientStorage.getAsync(IMAGE_BANK_FOLDER_STORAGE_KEY);
-      const apiKey = await figma.clientStorage.getAsync(API_KEY_STORAGE_KEY);
-      
-      if (!tokens) {
-        figma.notify('⚠️ Google Drive not connected. Image generated but not saved to cloud.', { error: true });
-        figma.ui.postMessage({
-          type: 'auto-upload-error',
-          message: 'Google Drive not connected'
-        });
-        return;
-      }
 
-      if (!imageBankFolder) {
-        figma.notify('⚠️ Image Bank folder not configured. Check Settings.', { error: true });
-        figma.ui.postMessage({
-          type: 'auto-upload-error',
-          message: 'Image Bank folder not configured'
-        });
-        return;
-      }
+      } else if (msg.type === 'check-drive-auth-status') {
+        // Poll backend for auth status
+        const requestId = msg.requestId;
+        const backendUrl = getBackendBaseUrl();
 
-      const backendUrl = getBackendBaseUrl();
+        try {
+          const response = await fetch(`${backendUrl}/drive/check-status?requestId=${requestId}`);
+          const data = await response.json();
 
-      // Notificar inicio
-      figma.notify(`☁️ Uploading to Drive with AI naming...`);
-
-      try {
-        // Backend usa a MESMA imagem + AI naming + upload
-        const response = await fetch(`${backendUrl}/drive/upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tokens,
-            folderId: imageBankFolder,
-            fileName: 'temp.png', // Fallback name (will be replaced by AI)
-            prompt: msg.prompt, // Backend will generate AI name from this
-            imageBase64: msg.imageBase64, // SAME image that was already generated
-            apiKey: apiKey || undefined
-          })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          figma.notify(`✅ Saved to Drive: ${data.fileName}`);
-          figma.ui.postMessage({
-            type: 'auto-upload-success',
-            filename: data.fileName,
-            fileUrl: data.webViewLink
-          });
-          
-          // Se houve refresh de token, atualizar storage
-          if (data.refreshedTokens) {
-            await figma.clientStorage.setAsync('google_drive_tokens', data.refreshedTokens);
+          if (data.status === 'success' && data.tokens) {
+            figma.ui.postMessage({
+              type: 'auth-status-success',
+              tokens: data.tokens
+            });
+          } else if (data.status === 'error') {
+            figma.ui.postMessage({
+              type: 'auth-status-error',
+              message: data.error || 'Authentication failed'
+            });
           }
-        } else {
-          throw new Error(data.message || 'Upload failed');
+          // If pending, UI will continue polling
+        } catch (error) {
+          console.error('Error checking auth status:', error);
+          figma.ui.postMessage({
+            type: 'auth-status-error',
+            message: error instanceof Error ? error.message : 'Failed to check auth status'
+          });
         }
-      } catch (err) {
-        console.error('Auto-upload error:', err);
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        figma.notify(`❌ Failed to save to Drive: ${errorMessage}`, { error: true });
-        figma.ui.postMessage({
-          type: 'auto-upload-error',
-          message: errorMessage
-        });
-      }
-    
-    } else if (msg.type === 'replace-current-image') {
-      console.log('🔄 Starting image replacement from Image Bank...');
-      const selection = figma.currentPage.selection;
-      
-      if (selection.length === 0) {
-        figma.notify('❌ Select a frame or image to replace.', { error: true });
-        figma.ui.postMessage({
-          type: 'error',
-          message: 'No element selected',
-          context: 'image-bank'
-        });
-        return;
-      }
 
-      const node = selection[0];
-      
-      // Check if node supports fills
-      if (!('fills' in node)) {
-        figma.notify('❌ Selected element does not support image fills.', { error: true });
-        figma.ui.postMessage({
-          type: 'error',
-          message: 'Selected element does not support fills',
-          context: 'image-bank'
-        });
-        return;
-      }
+      } else if (msg.type === 'save-drive-tokens') {
+        // Save tokens to clientStorage
+        await figma.clientStorage.setAsync('google_drive_tokens', msg.tokens);
+        console.log('✅ Tokens saved to clientStorage');
 
-      try {
-        // Convert base64 to Uint8Array without relying on atob (not available in plugin runtime)
-        const base64Data = msg.imageBase64;
-        const bytes = base64ToUint8Array(base64Data);
+      } else if (msg.type === 'save-drive-folder-id') {
+        // Save folder ID to clientStorage
+        await figma.clientStorage.setAsync('google_drive_folder_id', msg.folderId);
+        console.log('✅ Folder ID saved to clientStorage');
 
-        // Create image in Figma
-        const newImage = figma.createImage(bytes);
-        
-        // Get current fills
-        const fills = Array.isArray(node.fills) ? [...node.fills] : [];
-        const imageFillIndex = fills.findIndex((f: any) => f.type === 'IMAGE');
-        
-        // Create new image fill (preserving properties from old fill if exists)
-        let newFill: ImagePaint;
-        
-        if (imageFillIndex >= 0) {
-          const oldFill = fills[imageFillIndex] as ImagePaint;
-          // Preserve existing properties
-          newFill = {
-            type: 'IMAGE',
-            scaleMode: oldFill.scaleMode || 'FILL',
-            imageHash: newImage.hash,
-            ...(oldFill.imageTransform && { imageTransform: oldFill.imageTransform }),
-            ...(oldFill.scalingFactor !== undefined && { scalingFactor: oldFill.scalingFactor }),
-            ...(oldFill.rotation !== undefined && { rotation: oldFill.rotation }),
-            ...(oldFill.opacity !== undefined && { opacity: oldFill.opacity }),
-            ...(oldFill.visible !== undefined && { visible: oldFill.visible }),
-            ...(oldFill.blendMode && { blendMode: oldFill.blendMode }),
-          } as ImagePaint;
-          fills[imageFillIndex] = newFill;
-        } else {
-          // Create new fill if none existed
-          newFill = {
-            type: 'IMAGE',
-            scaleMode: 'FILL',
-            imageHash: newImage.hash,
-          } as ImagePaint;
-          fills.push(newFill);
+      } else if (msg.type === 'clear-drive-tokens') {
+        // Clear tokens and folder ID from clientStorage
+        await figma.clientStorage.deleteAsync('google_drive_tokens');
+        console.log('✅ Drive tokens cleared (folder IDs preserved)');
+
+      } else if (msg.type === 'export-to-drive') {
+        console.log('☁️ Starting bulk export to Google Drive...');
+        await handleExportToDrive(msg);
+
+      } else if (msg.type === 'manual-drive-upload') {
+        console.log('📤 Starting manual Drive upload...');
+        await handleManualDriveUpload();
+
+      } else if (msg.type === 'auto-upload-to-drive') {
+        console.log('☁️ Starting auto-upload to Google Drive...');
+        const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
+        const imageBankFolder = await figma.clientStorage.getAsync(IMAGE_BANK_FOLDER_STORAGE_KEY);
+        const apiKey = await figma.clientStorage.getAsync(API_KEY_STORAGE_KEY);
+
+        if (!tokens) {
+          figma.notify('⚠️ Google Drive not connected. Image generated but not saved to cloud.', { error: true });
+          figma.ui.postMessage({
+            type: 'auto-upload-error',
+            message: 'Google Drive not connected'
+          });
+          return;
         }
-        
-        node.fills = fills as Paint[];
-        
-        figma.notify(`✅ Image replaced: ${msg.fileName}`, { timeout: 3000 });
-        figma.ui.postMessage({
-          type: 'image-replaced-success',
-          fileName: msg.fileName
-        });
-        
-      } catch (error) {
-        console.error('Image replacement error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        figma.notify(`❌ Failed to replace image: ${errorMessage}`, { error: true });
-        figma.ui.postMessage({
-          type: 'error',
-          message: errorMessage,
-          context: 'image-bank'
-        });
+
+        if (!imageBankFolder) {
+          figma.notify('⚠️ Image Bank folder not configured. Check Settings.', { error: true });
+          figma.ui.postMessage({
+            type: 'auto-upload-error',
+            message: 'Image Bank folder not configured'
+          });
+          return;
+        }
+
+        const backendUrl = getBackendBaseUrl();
+
+        // Notificar inicio
+        figma.notify(`☁️ Uploading to Drive with AI naming...`);
+
+        try {
+          // Backend usa a MESMA imagem + AI naming + upload
+          const response = await fetch(`${backendUrl}/drive/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tokens,
+              folderId: imageBankFolder,
+              fileName: 'temp.png', // Fallback name (will be replaced by AI)
+              prompt: msg.prompt, // Backend will generate AI name from this
+              imageBase64: msg.imageBase64, // SAME image that was already generated
+              apiKey: apiKey || undefined
+            })
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            figma.notify(`✅ Saved to Drive: ${data.fileName}`);
+            figma.ui.postMessage({
+              type: 'auto-upload-success',
+              filename: data.fileName,
+              fileUrl: data.webViewLink
+            });
+
+            // Se houve refresh de token, atualizar storage
+            if (data.refreshedTokens) {
+              await figma.clientStorage.setAsync('google_drive_tokens', data.refreshedTokens);
+            }
+          } else {
+            throw new Error(data.message || 'Upload failed');
+          }
+        } catch (err) {
+          console.error('Auto-upload error:', err);
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          figma.notify(`❌ Failed to save to Drive: ${errorMessage}`, { error: true });
+          figma.ui.postMessage({
+            type: 'auto-upload-error',
+            message: errorMessage
+          });
+        }
+
+      } else if (msg.type === 'replace-current-image') {
+        console.log('🔄 Starting image replacement from Image Bank...');
+        const selection = figma.currentPage.selection;
+
+        if (selection.length === 0) {
+          figma.notify('❌ Select a frame or image to replace.', { error: true });
+          figma.ui.postMessage({
+            type: 'error',
+            message: 'No element selected',
+            context: 'image-bank'
+          });
+          return;
+        }
+
+        const node = selection[0];
+
+        // Check if node supports fills
+        if (!('fills' in node)) {
+          figma.notify('❌ Selected element does not support image fills.', { error: true });
+          figma.ui.postMessage({
+            type: 'error',
+            message: 'Selected element does not support fills',
+            context: 'image-bank'
+          });
+          return;
+        }
+
+        try {
+          // Convert base64 to Uint8Array without relying on atob (not available in plugin runtime)
+          const base64Data = msg.imageBase64;
+          const bytes = base64ToUint8Array(base64Data);
+
+          // Create image in Figma
+          const newImage = figma.createImage(bytes);
+
+          // Get current fills
+          const fills = Array.isArray(node.fills) ? [...node.fills] : [];
+          const imageFillIndex = fills.findIndex((f: any) => f.type === 'IMAGE');
+
+          // Create new image fill (preserving properties from old fill if exists)
+          let newFill: ImagePaint;
+
+          if (imageFillIndex >= 0) {
+            const oldFill = fills[imageFillIndex] as ImagePaint;
+            // Preserve existing properties
+            newFill = {
+              type: 'IMAGE',
+              scaleMode: oldFill.scaleMode || 'FILL',
+              imageHash: newImage.hash,
+              ...(oldFill.imageTransform && { imageTransform: oldFill.imageTransform }),
+              ...(oldFill.scalingFactor !== undefined && { scalingFactor: oldFill.scalingFactor }),
+              ...(oldFill.rotation !== undefined && { rotation: oldFill.rotation }),
+              ...(oldFill.opacity !== undefined && { opacity: oldFill.opacity }),
+              ...(oldFill.visible !== undefined && { visible: oldFill.visible }),
+              ...(oldFill.blendMode && { blendMode: oldFill.blendMode }),
+            } as ImagePaint;
+            fills[imageFillIndex] = newFill;
+          } else {
+            // Create new fill if none existed
+            newFill = {
+              type: 'IMAGE',
+              scaleMode: 'FILL',
+              imageHash: newImage.hash,
+            } as ImagePaint;
+            fills.push(newFill);
+          }
+
+          node.fills = fills as Paint[];
+
+          figma.notify(`✅ Image replaced: ${msg.fileName}`, { timeout: 3000 });
+          figma.ui.postMessage({
+            type: 'image-replaced-success',
+            fileName: msg.fileName
+          });
+
+        } catch (error) {
+          console.error('Image replacement error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          figma.notify(`❌ Failed to replace image: ${errorMessage}`, { error: true });
+          figma.ui.postMessage({
+            type: 'error',
+            message: errorMessage,
+            context: 'image-bank'
+          });
+        }
       }
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      figma.notify(`❌ Erro: ${errorMessage}`, { timeout: 5000 });
+      console.error('Plugin error:', error);
+
+      const context =
+        msg.type === 'resize-frame-stretch' || msg.type === 'resize-frame-reflow'
+          ? 'resize'
+          : msg.type === 'generate-image' || msg.type === 'regenerate-images'
+            ? 'image'
+            : msg.type === 'edit-frame-images' || msg.type === 'confirm-edit-frame-images'
+              ? 'image-edit'
+              : 'general';
+
+      figma.ui.postMessage({
+        type: 'error',
+        message: errorMessage,
+        context,
+      });
     }
-  } catch (error: any) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    figma.notify(`❌ Erro: ${errorMessage}`, { timeout: 5000 });
-    console.error('Plugin error:', error);
-
-    const context =
-      msg.type === 'resize-frame-stretch' || msg.type === 'resize-frame-reflow'
-        ? 'resize'
-        : msg.type === 'generate-image' || msg.type === 'regenerate-images'
-          ? 'image'
-          : msg.type === 'edit-frame-images' || msg.type === 'confirm-edit-frame-images'
-            ? 'image-edit'
-            : 'general';
-
-    figma.ui.postMessage({
-      type: 'error',
-      message: errorMessage,
-      context,
-    });
-  }
-};
+  };
 
 }
 
@@ -541,7 +545,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
     const { ImageGenerationService } = await import('./services/imageGenerationService');
     const { NamingUtils } = await import('./utils/namingConvention');
     const { prepareNodesForRegeneration } = await import('./utils/figmaUtils');
-    
+
     if (isRegeneration) {
       // Regeneração de imagens selecionadas
       const selection = figma.currentPage.selection;
@@ -551,7 +555,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
         }
         return false;
       });
-      
+
       if (imageNodes.length === 0) {
         figma.ui.postMessage({
           type: 'error',
@@ -560,7 +564,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
         });
         return;
       }
-      
+
       // Passo 0: Duplicar frames se necessário (antes de gerar imagens)
       // Usa a função utilitária dedicada para preparação de regeneração
       figma.ui.postMessage({
@@ -569,9 +573,9 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
         step: 0,
         totalSteps: 2 + imageNodes.length
       });
-      
+
       const { nodesToRegenerate, duplicatedFrames } = prepareNodesForRegeneration(imageNodes);
-      
+
       // Selecionar frames duplicados para feedback visual
       if (duplicatedFrames.length > 0) {
         figma.currentPage.selection = duplicatedFrames;
@@ -579,7 +583,7 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
           timeout: 3000
         });
       }
-      
+
       // Passo 1: Disparar todas as requisições para a API em paralelo
       figma.ui.postMessage({
         type: 'image-progress',
@@ -591,22 +595,22 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       const regenerationPromises = nodesToRegenerate.map(async (node, index) => {
         try {
           console.log(`🔄 [PARALLEL] Starting regeneration ${index + 1}/${nodesToRegenerate.length}: ${node.name}`);
-          
+
           // Extrai a imagem atual
           const imageFill = (node as any).fills.find((fill: any) => fill.type === 'IMAGE');
           if (!imageFill) {
             throw new Error('No image fill found');
           }
-          
+
           const image = figma.getImageByHash(imageFill.imageHash);
           if (!image) {
             throw new Error('Image hash not found');
           }
-          
+
           const imageBytes = await image.getBytesAsync();
-          
+
           let newImageBytes: Uint8Array;
-          
+
           if (msg.prompt && msg.prompt.trim()) {
             // Usa prompt customizado
             newImageBytes = await ImageGenerationService.generateImageAsBase64(msg.prompt, msg.apiKey, msg.size);
@@ -616,15 +620,15 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
             newImageBytes = await ImageGenerationService.regenerateImage(imageBytes, msg.apiKey);
             console.log(`✅ [PARALLEL] Auto-regenerated ${node.name}`);
           }
-          
+
           return newImageBytes;
-          
+
         } catch (error) {
           console.log(`❌ [PARALLEL] Error generating image for ${node.name}:`, error);
           throw error;
         }
       });
-      
+
       const results = await Promise.allSettled(regenerationPromises);
 
       // Passo 2: Aplicar as imagens de volta no Figma de forma SEQUENCIAL
@@ -632,49 +636,52 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
       let errorCount = 0;
 
       for (let i = 0; i < results.length; i++) {
-          const result = results[i];
-          const node = nodesToRegenerate[i];
+        const result = results[i];
+        const node = nodesToRegenerate[i];
 
-          // Feedback de progresso mais detalhado para o usuário
-          figma.ui.postMessage({
-              type: 'image-progress',
-              message: `Applying image ${i + 1} of ${nodesToRegenerate.length}...`,
-              step: 2 + i,
-              totalSteps: 2 + nodesToRegenerate.length
-          });
+        // Feedback de progresso mais detalhado para o usuário
+        figma.ui.postMessage({
+          type: 'image-progress',
+          message: `Applying image ${i + 1} of ${nodesToRegenerate.length}...`,
+          step: 2 + i,
+          totalSteps: 2 + nodesToRegenerate.length
+        });
 
-          if (result.status === 'fulfilled') {
-              try {
-                  await ImageGenerationService.replaceImageInFigma(node, result.value);
-                  successCount++;
-                  console.log(`✅ [APPLY] Imagem aplicada com sucesso a ${node.name}`);
-              } catch (applyError) {
-                  errorCount++;
-                  console.log(`❌ [APPLY] Erro ao aplicar imagem a ${node.name}:`, applyError);
-              }
-          } else {
-              errorCount++;
-              console.log(`❌ [GENERATE] Erro ao gerar imagem para ${node.name}:`, result.reason);
-              figma.notify(`Failed to generate image for ${node.name}`, { error: true });
+        if (result.status === 'fulfilled') {
+          try {
+            await ImageGenerationService.replaceImageInFigma(node, result.value);
+            successCount++;
+            console.log(`✅ [APPLY] Imagem aplicada com sucesso a ${node.name}`);
+
+            // Auto-upload and rename
+            void uploadImageToDrive(result.value, msg.prompt || node.name, node);
+          } catch (applyError) {
+            errorCount++;
+            console.log(`❌ [APPLY] Erro ao aplicar imagem a ${node.name}:`, applyError);
           }
+        } else {
+          errorCount++;
+          console.log(`❌ [GENERATE] Erro ao gerar imagem para ${node.name}:`, result.reason);
+          figma.notify(`Failed to generate image for ${node.name}`, { error: true });
+        }
 
-          // **A MUDANÇA MAIS IMPORTANTE!**
-          // Pausa de 50ms para permitir que a UI do Figma "respire"
-          await new Promise(resolve => setTimeout(resolve, 50));
+        // **A MUDANÇA MAIS IMPORTANTE!**
+        // Pausa de 50ms para permitir que a UI do Figma "respire"
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
-      
-      const message = errorCount > 0 
+
+      const message = errorCount > 0
         ? `Regenerated ${successCount}/${nodesToRegenerate.length} images (${errorCount} failures)`
         : `All ${successCount} images were regenerated successfully!`;
-      
+
       figma.ui.postMessage({
         type: 'image-complete',
         message: message
       });
-      
+
       figma.notify(`✅ ${message}`, { timeout: 3000 });
       console.log(`🎉 [PARALLEL] Regeneration complete: ${successCount} successes, ${errorCount} errors`);
-      
+
     } else {
       // New image generation (existing logic for one image is good)
       figma.ui.postMessage({
@@ -683,34 +690,39 @@ async function handleImageGeneration(msg: any, isRegeneration: boolean) {
         step: 1,
         totalSteps: 2
       });
-      
+
       const imageBytes = await ImageGenerationService.generateImageAsBase64(msg.prompt, msg.apiKey, msg.size);
-      
+
       // Convert Uint8Array to base64 using Figma's built-in function
       const imageBase64 = figma.base64Encode(imageBytes);
-      
+
       figma.ui.postMessage({
         type: 'image-progress',
         message: 'Creating image in Figma...',
         step: 2,
         totalSteps: 2
       });
-      
+
       const x = figma.viewport.center.x - 256;
       const y = figma.viewport.center.y - 256;
-      
-      await ImageGenerationService.createImageInFigma(imageBytes, x, y, `AI Generated: ${msg.prompt.slice(0, 30)}...`);
-      
+
+      const rect = await ImageGenerationService.createImageInFigma(imageBytes, x, y, `AI Generated: ${msg.prompt.slice(0, 30)}...`);
+
+      // Auto-upload and rename
+      if (rect) {
+        await uploadImageToDrive(imageBytes, msg.prompt, rect);
+      }
+
       figma.ui.postMessage({
         type: 'image-complete',
         message: 'New image created successfully!',
         prompt: msg.prompt,
         imageBase64: imageBase64 // Send base64 for auto-save
       });
-      
+
       figma.notify('✅ New AI image created!', { timeout: 3000 });
     }
-    
+
   } catch (error) {
     console.log('❌ Image generation error:', error);
     figma.ui.postMessage({
@@ -777,10 +789,10 @@ async function executeFrameImageEditing(msg: any) {
     });
 
     const { duplicateFrameWithDogoNaming, findCorrespondingNode } = await import('./utils/figmaUtils');
-    
+
     const duplicatedFrame = duplicateFrameWithDogoNaming(selectedNode as FrameNode);
     console.log(`✅ Frame duplicated: ${duplicatedFrame.name}`);
-    
+
     // Encontrar os nós de imagem correspondentes no frame duplicado
     const nodesToEdit: SceneNode[] = [];
     for (const originalImageNode of imageNodes) {
@@ -792,7 +804,7 @@ async function executeFrameImageEditing(msg: any) {
         console.log(`⚠️ Could not find corresponding node for ${originalImageNode.name}`);
       }
     }
-    
+
     if (nodesToEdit.length === 0) {
       figma.ui.postMessage({
         type: 'error',
@@ -801,7 +813,7 @@ async function executeFrameImageEditing(msg: any) {
       });
       return;
     }
-    
+
     // Selecionar o frame duplicado para feedback visual
     figma.currentPage.selection = [duplicatedFrame];
     figma.notify(`✅ Frame duplicated with Dogo naming convention. Editing ${nodesToEdit.length} image(s)...`, {
@@ -964,13 +976,13 @@ async function analyzeFrameForGranularEdit() {
               const imageBytes = await image.getBytesAsync();
               // Convert to base64
               const base64 = figma.base64Encode(imageBytes);
-              
+
               images.push({
                 nodeId: node.id,
                 nodeName: node.name,
                 imageBase64: base64
               });
-              
+
               console.log(`✅ Extracted image: ${node.name}`);
             }
           }
@@ -1000,7 +1012,7 @@ async function analyzeFrameForGranularEdit() {
 async function handleGranularImageEditing(msg: any) {
   try {
     const { tasks, apiKey, size } = msg;
-    
+
     if (!tasks || tasks.length === 0) {
       figma.ui.postMessage({
         type: 'granular-edit-error',
@@ -1094,11 +1106,11 @@ async function handleGranularImageEditing(msg: any) {
         return { success: true, targetNode, editedImageBytes: generatedImageBytes, nodeName: task.nodeName, error: null };
       } catch (error) {
         console.log(`❌ [GRANULAR] Error editing ${task.nodeName}:`, error);
-        return { 
-          success: false, 
-          nodeId: task.nodeId, 
+        return {
+          success: false,
+          nodeId: task.nodeId,
           nodeName: task.nodeName,
-          error: error instanceof Error ? error.message : 'Unknown error' 
+          error: error instanceof Error ? error.message : 'Unknown error'
         };
       }
     });
@@ -1122,6 +1134,9 @@ async function handleGranularImageEditing(msg: any) {
           await ImageGenerationService.replaceImageInFigma(result.targetNode, result.editedImageBytes);
           successCount++;
           console.log(`✅ [APPLY] Applied edited image to: ${result.nodeName}`);
+
+          // Auto-upload and rename
+          void uploadImageToDrive(result.editedImageBytes, result.nodeName, result.targetNode);
         } catch (error) {
           console.log(`❌ [APPLY] Failed to apply: ${result.nodeName}`, error);
           errorCount++;
@@ -1181,8 +1196,8 @@ async function handleFrameReflow(newHeight: number) {
     }
 
     if (newHeight < oldHeight) {
-       console.log(`⚠️ Skipping ${baseFrame.name}: Target height must be greater than current height.`);
-       continue;
+      console.log(`⚠️ Skipping ${baseFrame.name}: Target height must be greater than current height.`);
+      continue;
     }
 
     // Clone and position
@@ -1199,7 +1214,7 @@ async function handleFrameReflow(newHeight: number) {
       const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
       const parts = withoutDogo.split('_');
       const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
-      
+
       let newName = '';
       const ticketRegex = /^(Ticket\d+|\d+)$/;
       const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
@@ -1210,7 +1225,7 @@ async function handleFrameReflow(newHeight: number) {
       } else {
         newName = `Dogo_${withoutDogo}_${newDimension}`;
       }
-      
+
       newFrame.name = newName;
     } catch (namingError) {
       newFrame.name = `${baseFrame.name} (${Math.round(oldWidth)}x${Math.round(newHeight)})`;
@@ -1339,7 +1354,7 @@ async function handleFrameStretch(newHeight: number) {
     if (newHeight < oldHeight) continue;
 
     const stretchRatio = newHeight / oldHeight;
-    
+
     // Clone and position
     const newFrame = baseFrame.clone();
     newFrame.x = baseFrame.x + baseFrame.width + 100;
@@ -1354,11 +1369,11 @@ async function handleFrameStretch(newHeight: number) {
       const withoutDogo = cleanNameBase.replace(/^Dogo_/, '');
       const parts = withoutDogo.split('_');
       const newDimension = `${Math.round(oldWidth)}x${Math.round(newHeight)}`;
-      
+
       let newName = '';
       const ticketRegex = /^(Ticket\d+|\d+)$/;
       const hasTicket = parts.length > 0 && ticketRegex.test(parts[0]);
-      
+
       if (hasTicket && parts.length >= 3) {
         const restOfParts = parts.slice(3);
         newName = `Dogo_${parts[0]}_${parts[1]}_${newDimension}_${restOfParts.join('_')}`;
@@ -1380,28 +1395,73 @@ async function handleFrameStretch(newHeight: number) {
 
     // Stretch children
     for (const child of newFrame.children) {
-      if ('y' in child) {
-        const childNode = child as SceneNode & { y: number };
+      if (!('y' in child) || !('resize' in child)) continue;
+
+      const childNode = child as SceneNode & {
+        y: number,
+        x: number,
+        width: number,
+        height: number,
+        resize: (width: number, height: number) => void
+      };
+
+      // 1. Identify Background (logic from handleFrameReflow)
+      const normalizedName = child.name.toLowerCase();
+      const childWidth = childNode.width;
+      const childHeight = childNode.height;
+      const childTop = childNode.y;
+
+      const coversFrame =
+        childWidth >= oldWidth * 0.90 && // prompt says >90%
+        childHeight >= oldHeight * 0.90 &&
+        childTop <= oldHeight * 0.1;
+
+      const isBackground =
+        normalizedName.includes('bg') ||
+        normalizedName.includes('background') ||
+        coversFrame;
+
+      // 2. Identify Image or Vector
+      const isImage = 'fills' in child && Array.isArray(child.fills) && child.fills.some(f => f.type === 'IMAGE');
+      const isVector = ['VECTOR', 'STAR', 'LINE', 'POLYGON', 'ELLIPSE'].includes(child.type);
+
+      // 3. Apply Resize Logic
+      if (isBackground) {
+        // Linear stretch for background
         childNode.y *= stretchRatio;
-      }
+        try {
+          childNode.resize(childWidth, childHeight * stretchRatio);
+        } catch (error) {
+          console.log(`⚠️ Failed to stretch background ${child.name}`);
+        }
+      } else if (isImage || isVector) {
+        // Proportional resize for Images and Vectors
+        const originalCenterX = childNode.x + childWidth / 2;
 
-      if ('resize' in child && typeof (child as any).height === 'number') {
-        const resizableChild = child as SceneNode & {
-          resize: (width: number, height: number) => void;
-        };
-        const childWidth = typeof (child as any).width === 'number' ? ((child as any).width as number) : undefined;
-        const childHeight = (child as any).height as number;
+        const newHeight = childHeight * stretchRatio;
+        const newWidth = childHeight > 0 ? newHeight * (childWidth / childHeight) : childWidth;
 
-        if (typeof childWidth === 'number') {
-          try {
-            resizableChild.resize(childWidth, childHeight * stretchRatio);
-          } catch (error) {
-            console.log(`⚠️ Failed to stretch ${child.name}`);
-          }
+        childNode.y *= stretchRatio;
+
+        try {
+          childNode.resize(newWidth, newHeight);
+
+          // 4. Center horizontally relative to original center
+          childNode.x = originalCenterX - newWidth / 2;
+        } catch (error) {
+          console.log(`⚠️ Failed to resize ${child.name} proportionally`);
+        }
+      } else {
+        // Default linear vertical stretch for other elements
+        childNode.y *= stretchRatio;
+        try {
+          childNode.resize(childWidth, childHeight * stretchRatio);
+        } catch (error) {
+          console.log(`⚠️ Failed to stretch ${child.name}`);
         }
       }
     }
-    
+
     newFrames.push(newFrame);
     successCount++;
   }
@@ -1409,7 +1469,7 @@ async function handleFrameStretch(newHeight: number) {
   if (newFrames.length > 0) {
     figma.currentPage.selection = newFrames;
     figma.viewport.scrollAndZoomIntoView(newFrames);
-    
+
     const successMsg = `✅ Processed ${successCount} frame(s) [Stretch]`;
     figma.notify(successMsg, { timeout: 3000 });
     figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
@@ -1426,7 +1486,7 @@ async function handleExportToDrive(msg: any) {
     // Get tokens and folderId from clientStorage
     const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
     const folderId = msg.folderId;
-    
+
     if (!tokens) {
       figma.notify('❌ Please connect your Google Drive first', { timeout: 3000 });
       figma.ui.postMessage({
@@ -1436,9 +1496,9 @@ async function handleExportToDrive(msg: any) {
       });
       return;
     }
-    
+
     const selection = figma.currentPage.selection;
-    
+
     if (selection.length === 0) {
       figma.notify('❌ Please select at least one frame to export', { timeout: 3000 });
       figma.ui.postMessage({
@@ -1449,9 +1509,9 @@ async function handleExportToDrive(msg: any) {
       });
       return;
     }
-    
+
     const frames = selection.filter(node => node.type === 'FRAME') as FrameNode[];
-    
+
     if (frames.length === 0) {
       figma.notify('❌ Please select frames', { timeout: 3000 });
       figma.ui.postMessage({
@@ -1462,24 +1522,24 @@ async function handleExportToDrive(msg: any) {
       });
       return;
     }
-    
+
     console.log(`☁️ Exporting ${frames.length} frame(s) to Google Drive...`);
     figma.notify(`📤 Exporting ${frames.length} frame(s)...`, { timeout: 2000 });
-    
+
     // Export all frames and send to UI without waiting for upload completion
     // The UI will handle uploads with its queue system
     for (let i = 0; i < frames.length; i++) {
       const frame = frames[i];
       const frameName = frame.name;
-      
+
       try {
         const imageBytes = await frame.exportAsync({
           format: 'PNG',
           constraint: { type: 'SCALE', value: 1 }
         });
-        
+
         const frameData = Array.from(imageBytes);
-        
+
         // Send to UI for upload (non-blocking)
         figma.ui.postMessage({
           type: 'drive-export-frame',
@@ -1490,19 +1550,19 @@ async function handleExportToDrive(msg: any) {
           currentIndex: i + 1,
           totalFrames: frames.length
         });
-        
+
         console.log(`✅ Exported frame ${i + 1}/${frames.length}: ${frameName}`);
-        
+
       } catch (error) {
         console.error(`❌ Error exporting ${frameName}:`, error);
       }
     }
-    
+
     // All frames have been exported and sent to UI
     // The UI queue manager will handle the upload completion notification
     console.log(`✅ All ${frames.length} frames exported. UI is handling uploads...`);
     figma.notify(`✅ ${frames.length} frames exported. Uploading in progress...`, { timeout: 3000 });
-    
+
   } catch (error) {
     console.error('❌ Export error:', error);
     figma.ui.postMessage({
@@ -1510,5 +1570,109 @@ async function handleExportToDrive(msg: any) {
       message: error instanceof Error ? error.message : 'Unknown error',
       context: 'drive-export'
     });
+  }
+}
+
+/**
+ * Reusable helper to upload an image to Google Drive and rename the Figma node.
+ */
+async function uploadImageToDrive(imageBytes: Uint8Array, prompt: string, node?: SceneNode): Promise<{ success: boolean; fileName?: string }> {
+  try {
+    const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
+    const imageBankFolder = await figma.clientStorage.getAsync(IMAGE_BANK_FOLDER_STORAGE_KEY);
+    const apiKey = await figma.clientStorage.getAsync(API_KEY_STORAGE_KEY);
+
+    if (!tokens || !imageBankFolder) {
+      console.log('⚠️ Drive tokens or Image Bank folder missing. Skipping auto-upload.');
+      return { success: false };
+    }
+
+    const backendUrl = getBackendBaseUrl();
+    const imageBase64 = figma.base64Encode(imageBytes);
+
+    console.log(`☁️ [AUTO-UPLOAD] Uploading to Drive...`);
+
+    const response = await fetch(`${backendUrl}/drive/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tokens,
+        folderId: imageBankFolder,
+        fileName: 'temp.png',
+        prompt: prompt,
+        imageBase64: imageBase64,
+        apiKey: apiKey || undefined
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      console.log(`✅ [AUTO-UPLOAD] Success: ${data.fileName}`);
+
+      if (node) {
+        const nameWithoutExt = data.fileName.replace(/\.[^/.]+$/, "");
+        // Request says: "O formato deve ser estritamente: ia_dog_[age/descrição]_[color]_[action]."
+        // Backend returns AI_dog_... correctly converted.
+        node.name = nameWithoutExt.replace(/^AI_dog_/i, 'ia_dog_');
+        console.log(`🏷️ [RENAME] Node renamed to: ${node.name}`);
+      }
+
+      if (data.refreshedTokens) {
+        await figma.clientStorage.setAsync('google_drive_tokens', data.refreshedTokens);
+      }
+      return { success: true, fileName: data.fileName };
+    } else {
+      console.log(`❌ [AUTO-UPLOAD] Backend failed: ${data.message}`);
+    }
+  } catch (err) {
+    console.error('❌ [AUTO-UPLOAD] Error:', err);
+  }
+  return { success: false };
+}
+
+/**
+ * Handle manual Drive upload for selected node.
+ */
+async function handleManualDriveUpload() {
+  try {
+    const selection = figma.currentPage.selection;
+    if (selection.length !== 1) {
+      figma.notify('❌ Select a single image node to upload.', { error: true });
+      return;
+    }
+
+    const node = selection[0];
+    if (!('fills' in node) || !Array.isArray(node.fills)) {
+      figma.notify('❌ Selected node does not support image fills.', { error: true });
+      return;
+    }
+
+    const imageFill = node.fills.find((f: any) => f.type === 'IMAGE') as ImagePaint;
+    if (!imageFill || !imageFill.imageHash) {
+      figma.notify('❌ Selected node does not contain an image.', { error: true });
+      return;
+    }
+
+    const image = figma.getImageByHash(imageFill.imageHash);
+    if (!image) {
+      figma.notify('❌ Could not retrieve image from node.', { error: true });
+      return;
+    }
+
+    figma.notify('📤 Uploading to Drive...');
+    const bytes = await image.getBytesAsync();
+
+    // For manual upload, we use the current node name as prompt or description
+    const result = await uploadImageToDrive(bytes, node.name, node);
+
+    if (result.success) {
+      figma.notify(`✅ Uploaded and renamed: ${result.fileName}`);
+    } else {
+      figma.notify('❌ Upload failed. Check Drive connection and settings.', { error: true });
+    }
+  } catch (error) {
+    console.error('Manual upload error:', error);
+    figma.notify('❌ Error during manual upload.', { error: true });
   }
 }

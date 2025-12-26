@@ -1359,6 +1359,7 @@ async function handleFrameStretch(newHeight: number) {
     const newFrame = baseFrame.clone();
     newFrame.x = baseFrame.x + baseFrame.width + 100;
     newFrame.y = baseFrame.y;
+    newFrame.clipsContent = true; // Ensure content is clipped
 
     // --- Dogo Naming Logic ---
     try {
@@ -1398,66 +1399,68 @@ async function handleFrameStretch(newHeight: number) {
       if (!('y' in child) || !('resize' in child)) continue;
 
       const childNode = child as SceneNode & {
-        y: number,
-        x: number,
-        width: number,
-        height: number,
-        resize: (width: number, height: number) => void
+        y: number;
+        x: number;
+        width: number;
+        height: number;
+        resize: (width: number, height: number) => void;
       };
 
-      // 1. Identify Background (logic from handleFrameReflow)
       const normalizedName = child.name.toLowerCase();
-      const childWidth = childNode.width;
-      const childHeight = childNode.height;
-      const childTop = childNode.y;
+      const isAsset =
+        child.type === 'VECTOR' ||
+        child.type === 'STAR' ||
+        child.type === 'ELLIPSE' ||
+        (child.type === 'INSTANCE' && (normalizedName.includes('icon') || normalizedName.includes('ícone'))) ||
+        hasImageFill(child);
 
-      const coversFrame =
-        childWidth >= oldWidth * 0.90 && // prompt says >90%
-        childHeight >= oldHeight * 0.90 &&
-        childTop <= oldHeight * 0.1;
+      const isLayoutContainer =
+        child.type === 'FRAME' ||
+        child.type === 'GROUP' ||
+        child.type === 'COMPONENT' ||
+        child.type === 'INSTANCE'; // Normal instances (non-icons) also stretch
 
-      const isBackground =
-        normalizedName.includes('bg') ||
-        normalizedName.includes('background') ||
-        coversFrame;
+      if (isAsset) {
+        // PROPORTIONAL SCALE for assets
+        const originalWidth = childNode.width;
+        const originalHeight = childNode.height;
+        const scaleFactor = newHeight / oldHeight;
 
-      // 2. Identify Image or Vector
-      const isImage = 'fills' in child && Array.isArray(child.fills) && child.fills.some(f => f.type === 'IMAGE');
-      const isVector = ['VECTOR', 'STAR', 'LINE', 'POLYGON', 'ELLIPSE'].includes(child.type);
+        // Apply new height and calculate proportional width
+        const targetHeight = originalHeight * scaleFactor;
+        const targetWidth = originalWidth * scaleFactor;
 
-      // 3. Apply Resize Logic
-      if (isBackground) {
-        // Linear stretch for background
-        childNode.y *= stretchRatio;
+        // Adjust Y position
+        childNode.y *= scaleFactor;
+
         try {
-          childNode.resize(childWidth, childHeight * stretchRatio);
+          childNode.resize(targetWidth, targetHeight);
+          // Centralize horizontally relative to the frame (1080px is the expected width)
+          childNode.x = (oldWidth - targetWidth) / 2;
         } catch (error) {
-          console.log(`⚠️ Failed to stretch background ${child.name}`);
+          console.log(`⚠️ Failed to resize asset ${child.name} proportionally`);
         }
-      } else if (isImage || isVector) {
-        // Proportional resize for Images and Vectors
-        const originalCenterX = childNode.x + childWidth / 2;
-
-        const newHeight = childHeight * stretchRatio;
-        const newWidth = childHeight > 0 ? newHeight * (childWidth / childHeight) : childWidth;
-
-        childNode.y *= stretchRatio;
-
-        try {
-          childNode.resize(newWidth, newHeight);
-
-          // 4. Center horizontally relative to original center
-          childNode.x = originalCenterX - newWidth / 2;
-        } catch (error) {
-          console.log(`⚠️ Failed to resize ${child.name} proportionally`);
-        }
-      } else {
-        // Default linear vertical stretch for other elements
+      } else if (isLayoutContainer || child.type === 'RECTANGLE') {
+        // STRETCH for layout containers and rectangles (unless they are image assets)
         childNode.y *= stretchRatio;
         try {
-          childNode.resize(childWidth, childHeight * stretchRatio);
+          const targetHeight = childNode.height * stretchRatio;
+          childNode.resize(childNode.width, targetHeight);
         } catch (error) {
           console.log(`⚠️ Failed to stretch ${child.name}`);
+        }
+      } else if (child.type === 'TEXT') {
+        // REPOSITION for text
+        childNode.y *= stretchRatio;
+        // Text resize can be tricky, but usually we just move it or adjust the box
+        // To avoid font scaling, we just move it.
+      } else {
+        // DEFAULT: Reposition and stretch
+        childNode.y *= stretchRatio;
+        try {
+          childNode.resize(childNode.width, childNode.height * stretchRatio);
+        } catch (error) {
+          console.log(`⚠️ Failed to stretch default node ${child.name}`);
         }
       }
     }
@@ -1470,12 +1473,19 @@ async function handleFrameStretch(newHeight: number) {
     figma.currentPage.selection = newFrames;
     figma.viewport.scrollAndZoomIntoView(newFrames);
 
-    const successMsg = `✅ Processed ${successCount} frame(s) [Stretch]`;
+    const successMsg = `✅ Processed ${successCount} frame(s) [Intelligent Stretch]`;
     figma.notify(successMsg, { timeout: 3000 });
     figma.ui.postMessage({ type: 'resize-complete', message: successMsg });
   } else {
-    figma.notify("⚠️ No frames were stretched.");
+    figma.notify('⚠️ No frames were stretched.');
   }
+}
+
+function hasImageFill(node: SceneNode): boolean {
+  if ('fills' in node && Array.isArray(node.fills)) {
+    return node.fills.some(fill => fill.type === 'IMAGE');
+  }
+  return false;
 }
 
 /**

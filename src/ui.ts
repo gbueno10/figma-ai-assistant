@@ -1023,6 +1023,10 @@ const template = `
         📤 Export Selected Frames
       </button>
       
+      <button id="manualUploadBtn" type="button" class="secondary" style="margin-top: 8px;">
+        🎨 Manual Upload Selection (Rename AI)
+      </button>
+      
       <button id="disconnectDriveBtn" type="button" class="secondary" style="margin-top: 8px;">
         🔌 Disconnect
       </button>
@@ -1154,7 +1158,7 @@ class UploadQueueManager {
 
     this.activeUploads++;
     const uploadTask = this.uploadQueue.shift();
-    
+
     if (uploadTask) {
       try {
         await uploadTask();
@@ -1164,13 +1168,13 @@ class UploadQueueManager {
       } finally {
         this.activeUploads--;
         this.completedUploads++;
-        
+
         // Update progress
         this.updateProgress();
-        
+
         // Process next in queue
         this.processQueue();
-        
+
         // Check if all uploads are complete
         if (this.completedUploads === this.totalUploadsExpected && this.activeUploads === 0) {
           this.finalizeExport();
@@ -1192,14 +1196,14 @@ class UploadQueueManager {
   private finalizeExport(): void {
     const driveExportStatus = document.getElementById('driveExportStatus') as HTMLDivElement;
     const exportToDriveBtn = document.getElementById('exportToDriveBtn') as HTMLButtonElement;
-    
+
     if (exportToDriveBtn) {
       exportToDriveBtn.disabled = false;
     }
-    
+
     if (driveExportStatus) {
       const successCount = this.completedUploads - this.failedUploads;
-      
+
       if (this.failedUploads === 0) {
         driveExportStatus.style.background = '#f0fdf4';
         driveExportStatus.style.color = '#059669';
@@ -1210,9 +1214,9 @@ class UploadQueueManager {
         driveExportStatus.innerHTML = `⚠️ Exported ${successCount}/${this.totalUploadsExpected} frames. ${this.failedUploads} failed.`;
       }
     }
-    
+
     console.log(`✅ Export complete: ${this.completedUploads - this.failedUploads} success, ${this.failedUploads} failed`);
-    
+
     // Reset for next export
     setTimeout(() => this.reset(), 3000);
   }
@@ -1299,7 +1303,7 @@ function initSettingsToggle(): void {
 
   settingsHeader.addEventListener('click', () => {
     const isExpanded = settingsContent.classList.contains('expanded');
-    
+
     if (isExpanded) {
       settingsContent.classList.remove('expanded');
       settingsToggle.classList.remove('expanded');
@@ -1340,7 +1344,7 @@ function initImageGeneration(): void {
   const generateBtn = getElement<HTMLButtonElement>('generateBtn');
   const imagePrompt = getElement<HTMLTextAreaElement>('imagePrompt');
   const imageSize = getElement<HTMLSelectElement>('imageSize');
-  
+
   // Scroll to Drive config
   const scrollToDriveLink = document.getElementById('scrollToDriveConfig');
   if (scrollToDriveLink) {
@@ -1425,10 +1429,10 @@ function initAnalyze(): void {
   copyJsonBtn.addEventListener('click', () => {
     const jsonOutput = getElement<HTMLDivElement>('jsonOutput');
     const preElement = jsonOutput.querySelector('pre');
-    
+
     if (preElement) {
       const textToCopy = preElement.textContent || '';
-      
+
       // Copy to clipboard using the Clipboard API
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(textToCopy)
@@ -1451,7 +1455,7 @@ function initAnalyze(): void {
         textarea.style.opacity = '0';
         document.body.appendChild(textarea);
         textarea.select();
-        
+
         try {
           document.execCommand('copy');
           const originalText = copyJsonBtn.textContent;
@@ -1463,7 +1467,7 @@ function initAnalyze(): void {
           console.error('Failed to copy:', err);
           alert('Failed to copy to clipboard');
         }
-        
+
         document.body.removeChild(textarea);
       }
     }
@@ -1534,16 +1538,16 @@ function initGranularEditing(): void {
   const imageCount = getElement<HTMLSpanElement>('granularImageCount');
   const executeBtn = getElement<HTMLButtonElement>('executeGranularEditBtn');
   const cancelBtn = getElement<HTMLButtonElement>('cancelGranularEditBtn');
-  
+
   // Analyze frame for granular editing
   analyzeBtn.addEventListener('click', () => {
     console.log('🔍 Analyzing frame for granular editing...');
     analyzeBtn.disabled = true;
     analyzeBtn.textContent = '⏳ Analyzing...';
-    
+
     postPluginMessage({ type: 'analyze-frame-for-granular-edit' });
   });
-  
+
   // Select all checkbox handler
   selectAllCheckbox.addEventListener('change', () => {
     const isChecked = selectAllCheckbox.checked;
@@ -1562,24 +1566,24 @@ function initGranularEditing(): void {
     });
     updateExecuteButton();
   });
-  
+
   // Execute granular edit
   executeBtn.addEventListener('click', () => {
     const selectedImages = granularImagesData.filter(img => img.selected && img.customPrompt.trim());
-    
+
     if (selectedImages.length === 0) {
       showResult('Please select at least one image and provide a prompt.', 'error', 'resultGranularEdit');
       return;
     }
-    
+
     const apiKey = getElement<HTMLInputElement>('apiKey').value.trim();
-    
+
     if (!apiKey) {
       console.log('⚠️ No API key provided; relying on backend configuration.');
     }
-    
+
     saveSettings();
-    
+
     // Prepare tasks
     const tasks = selectedImages.map(img => ({
       nodeId: img.nodeId,
@@ -1587,20 +1591,20 @@ function initGranularEditing(): void {
       imageBase64: img.imageBase64,
       prompt: img.customPrompt.trim()
     }));
-    
+
     console.log(`🎯 Executing granular edit with ${tasks.length} task(s)`);
-    
+
     // Show loading state
     listContainer.style.display = 'none';
     getElement<HTMLDivElement>('loadingGranularEdit').style.display = 'block';
     getElement<HTMLDivElement>('resultGranularEdit').innerHTML = '';
-    
+
     resetProgress(
       'progressBarGranularEdit',
       'progressTextGranularEdit',
       `Processing ${tasks.length} image(s)...`
     );
-    
+
     postPluginMessage({
       type: 'granular-image-edit',
       tasks,
@@ -1608,23 +1612,23 @@ function initGranularEditing(): void {
       size: '1024x1024'
     });
   });
-  
+
   // Cancel granular edit
   cancelBtn.addEventListener('click', () => {
     listContainer.style.display = 'none';
     analyzeBtn.style.display = 'block';
     granularImagesData = [];
   });
-  
+
   function updateExecuteButton(): void {
     const hasSelectedWithPrompt = granularImagesData.some(img => img.selected && img.customPrompt.trim());
     executeBtn.disabled = !hasSelectedWithPrompt;
   }
-  
+
   function renderGranularImageList(images: GranularImageData[]): void {
     granularImagesData = images;
     imageList.innerHTML = '';
-    
+
     if (images.length === 0) {
       imageList.innerHTML = `
         <div class="granular-empty-state">
@@ -1635,12 +1639,12 @@ function initGranularEditing(): void {
       executeBtn.disabled = true;
       return;
     }
-    
+
     images.forEach((img, index) => {
       const card = document.createElement('div');
       card.className = 'granular-image-card selected';
       card.id = `granular-card-${index}`;
-      
+
       card.innerHTML = `
         <div class="granular-image-preview">
           <img src="data:image/png;base64,${img.imageBase64}" alt="${img.nodeName}" />
@@ -1660,13 +1664,13 @@ function initGranularEditing(): void {
           ></textarea>
         </div>
       `;
-      
+
       imageList.appendChild(card);
-      
+
       // Add event listeners
       const checkbox = document.getElementById(`granular-checkbox-${index}`) as HTMLInputElement;
       const textarea = document.getElementById(`granular-prompt-${index}`) as HTMLTextAreaElement;
-      
+
       checkbox.addEventListener('change', () => {
         granularImagesData[index].selected = checkbox.checked;
         if (checkbox.checked) {
@@ -1674,28 +1678,28 @@ function initGranularEditing(): void {
         } else {
           card.classList.remove('selected');
         }
-        
+
         // Update select all checkbox
         const allSelected = granularImagesData.every(i => i.selected);
         const noneSelected = granularImagesData.every(i => !i.selected);
         selectAllCheckbox.checked = allSelected;
         selectAllCheckbox.indeterminate = !allSelected && !noneSelected;
-        
+
         updateExecuteButton();
       });
-      
+
       textarea.addEventListener('input', () => {
         granularImagesData[index].customPrompt = textarea.value;
         updateExecuteButton();
       });
     });
-    
+
     imageCount.textContent = `${images.length} image${images.length !== 1 ? 's' : ''}`;
     selectAllCheckbox.checked = true;
     selectAllCheckbox.indeterminate = false;
     updateExecuteButton();
   }
-  
+
   // Expose render function globally for message handler
   (window as any).renderGranularImageList = renderGranularImageList;
   (window as any).resetGranularEditUI = () => {
@@ -1743,25 +1747,26 @@ function initExportToDrive(): void {
   const stateConnecting = getElement<HTMLDivElement>('driveStateConnecting');
   const stateConnected = getElement<HTMLDivElement>('driveStateConnected');
   const stateError = getElement<HTMLDivElement>('driveStateError');
-  
+
   const connectDriveBtn = getElement<HTMLButtonElement>('connectDriveBtn');
   const cancelConnectBtn = getElement<HTMLButtonElement>('cancelConnectBtn');
   const disconnectDriveBtn = getElement<HTMLButtonElement>('disconnectDriveBtn');
   const retryConnectBtn = getElement<HTMLButtonElement>('retryConnectBtn');
   const exportToDriveBtn = getElement<HTMLButtonElement>('exportToDriveBtn');
+  const manualUploadBtn = getElement<HTMLButtonElement>('manualUploadBtn');
   const driveExportStatus = getElement<HTMLDivElement>('driveExportStatus');
   const driveErrorMessage = getElement<HTMLDivElement>('driveErrorMessage');
   const authUrlInput = getElement<HTMLInputElement>('authUrlInput');
   const copyAuthUrlBtn = getElement<HTMLButtonElement>('copyAuthUrlBtn');
-  
+
   let pollingInterval: number | null = null;
   let currentRequestId: string | null = null;
-  
+
   // Show initial state based on stored tokens
   function checkInitialState(): void {
     postPluginMessage({ type: 'check-drive-tokens' });
   }
-  
+
   // Show State 1: Disconnected
   function showDisconnectedState(): void {
     driveCardTitle.textContent = '☁️ Connect Google Drive';
@@ -1772,7 +1777,7 @@ function initExportToDrive(): void {
     stateError.style.display = 'none';
     driveExportStatus.style.display = 'none';
   }
-  
+
   // Show State 2: Connecting (Active Polling)
   function showConnectingState(authUrl: string): void {
     driveCardTitle.textContent = '🔄 Waiting for Authorization...';
@@ -1783,22 +1788,22 @@ function initExportToDrive(): void {
     stateConnected.style.display = 'none';
     stateError.style.display = 'none';
   }
-  
+
   // Show State 3: Connected
   function showConnectedState(userEmail?: string): void {
     driveCardTitle.textContent = '✅ Google Drive Connected';
-    driveCardDescription.textContent = userEmail 
+    driveCardDescription.textContent = userEmail
       ? `Authenticated as ${userEmail}. Configure folders in Settings.`
       : 'Successfully authenticated. Configure folders in Settings.';
     stateDisconnected.style.display = 'none';
     stateConnecting.style.display = 'none';
     stateConnected.style.display = 'block';
     stateError.style.display = 'none';
-    
+
     // Export button is always enabled when connected
     exportToDriveBtn.disabled = false;
   }
-  
+
   // Show State 4: Error
   function showErrorState(errorMsg: string): void {
     driveCardTitle.textContent = '❌ Connection Error';
@@ -1809,7 +1814,7 @@ function initExportToDrive(): void {
     stateConnected.style.display = 'none';
     stateError.style.display = 'block';
   }
-  
+
   // Stop polling
   function stopPolling(): void {
     if (pollingInterval) {
@@ -1818,19 +1823,19 @@ function initExportToDrive(): void {
     }
     currentRequestId = null;
   }
-  
+
   // Start polling for auth status
   function startPolling(requestId: string): void {
     stopPolling(); // Clear any existing polling
     currentRequestId = requestId;
-    
+
     pollingInterval = window.setInterval(() => {
       postPluginMessage({
         type: 'check-drive-auth-status',
         requestId
       });
     }, 2000); // Poll every 2 seconds
-    
+
     // Timeout after 5 minutes
     setTimeout(() => {
       if (currentRequestId === requestId) {
@@ -1839,11 +1844,11 @@ function initExportToDrive(): void {
       }
     }, 5 * 60 * 1000);
   }
-  
+
   // Copy auth URL button
   copyAuthUrlBtn.addEventListener('click', () => {
     authUrlInput.select();
-    
+
     // Try modern clipboard API
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(authUrlInput.value)
@@ -1872,36 +1877,36 @@ function initExportToDrive(): void {
       }
     }
   });
-  
+
   // Connect Drive button
   connectDriveBtn.addEventListener('click', () => {
     console.log('🔗 Connecting to Google Drive...');
-    
+
     // Generate request ID
     const requestId = Date.now().toString() + Math.random().toString(36).substring(2);
-    
+
     // Request auth URL from plugin
     postPluginMessage({
       type: 'get-drive-auth-url',
       requestId
     });
-    
+
     // Will show connecting state when URL arrives
   });
-  
+
   // Cancel button
   cancelConnectBtn.addEventListener('click', () => {
     console.log('❌ Cancelled connection');
     stopPolling();
     showDisconnectedState();
   });
-  
+
   // Retry button
   retryConnectBtn.addEventListener('click', () => {
     console.log('🔄 Retrying connection...');
     showDisconnectedState();
   });
-  
+
   // Disconnect button
   disconnectDriveBtn.addEventListener('click', () => {
     console.log('🔌 Disconnecting from Google Drive...');
@@ -1910,12 +1915,15 @@ function initExportToDrive(): void {
     // Update status indicator in Settings section
     updateDriveStatusIndicator(false);
   });
-  
-  // Export to Drive button
+
+  manualUploadBtn.addEventListener('click', () => {
+    parent.postMessage({ pluginMessage: { type: 'manual-drive-upload' } }, '*');
+  });
+
   exportToDriveBtn.addEventListener('click', () => {
     // Get exports folder from settings
     const exportsFolderSetting = getElement<HTMLInputElement>('exportsFolder').value.trim();
-    
+
     if (!exportsFolderSetting) {
       driveExportStatus.style.display = 'block';
       driveExportStatus.style.background = '#fee2e2';
@@ -1923,24 +1931,24 @@ function initExportToDrive(): void {
       driveExportStatus.innerHTML = '❌ Please configure Exports Folder in Settings first';
       return;
     }
-    
+
     // Disable button during export
     exportToDriveBtn.disabled = true;
     driveExportStatus.style.display = 'block';
     driveExportStatus.style.background = '#dbeafe';
     driveExportStatus.style.color = '#1e40af';
     driveExportStatus.innerHTML = '⏳ Exporting to configured Exports folder...';
-    
+
     // Request frame exports from plugin
     postPluginMessage({
       type: 'export-to-drive',
       folderId: exportsFolderSetting
     });
   });
-  
+
   // Initialize
   checkInitialState();
-  
+
   // Expose functions for message handlers
   (window as any).driveUI = {
     showDisconnectedState,
@@ -2083,7 +2091,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       const backendUrlInput = getElement<HTMLInputElement>('backendUrl');
       const exportsFolderInput = getElement<HTMLInputElement>('exportsFolder');
       const imageBankFolderInput = getElement<HTMLInputElement>('imageBankFolder');
-      
+
       apiKeyInput.value = (msg.apiKey as string) || '';
       backendUrlInput.value = (msg.backendUrl as string) || 'http://localhost:3000/api';
       exportsFolderInput.value = (msg.exportsFolder as string) || '';
@@ -2106,10 +2114,10 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       jsonOutput.innerHTML = `
         <strong>📊 Design Analysis JSON:</strong><br>
         <pre style="white-space: pre-wrap; word-break: break-all; margin-top: 8px;">${JSON.stringify(
-          msg.analysisData,
-          null,
-          2
-        )}</pre>
+        msg.analysisData,
+        null,
+        2
+      )}</pre>
       `;
       jsonOutput.style.display = 'block';
       getElement<HTMLDivElement>('jsonActions').style.display = 'flex';
@@ -2129,14 +2137,14 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
         <strong>🧠 Design Analysis (JSON):</strong><br>
         <pre style="white-space: pre-wrap; word-break: break-all; margin-top: 8px;">${JSON.stringify(msg.structuredData, null, 2)}</pre>
       `;
-      
+
       // Click to expand
       jsonDiv.addEventListener('click', function expandJson() {
         this.classList.remove('minimized');
         this.style.cursor = 'default';
         this.removeEventListener('click', expandJson);
       });
-      
+
       resultDiv.innerHTML = `
         <div class="result success">
           <strong>🧠 Design Analysis</strong>
@@ -2155,14 +2163,14 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
         <strong>🤖 AI Modifications:</strong><br>
         <pre style="white-space: pre-wrap; word-break: break-all; margin-top: 8px;">${JSON.stringify(msg.modifications, null, 2)}</pre>
       `;
-      
+
       // Click to expand
       jsonDiv.addEventListener('click', function expandJson() {
         this.classList.remove('minimized');
         this.style.cursor = 'default';
         this.removeEventListener('click', expandJson);
       });
-      
+
       resultDiv.innerHTML += `
         <div class="result success" style="margin-top: 16px;">
           <strong>🤖 AI Modifications Received</strong>
@@ -2217,27 +2225,27 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
           ✅ New image created successfully!
         </div>
       `;
-      
+
       // Auto-save to Drive logic
       const autoSaveCheckbox = document.getElementById('autoSaveDrive') as HTMLInputElement;
       const shouldAutoSave = autoSaveCheckbox && autoSaveCheckbox.checked;
-      
+
       console.log('🔍 Auto-save check:', {
         shouldAutoSave,
         hasImageUrl: !!msg.imageUrl,
         imageUrlType: typeof msg.imageUrl
       });
-      
+
       if (shouldAutoSave && msg.imageUrl) {
         const promptUsed = (document.getElementById('imagePrompt') as HTMLTextAreaElement).value;
         const imageBase64 = (msg.imageUrl as string).split(',')[1]; // Remove o header data:image...
-        
+
         console.log('📤 Triggering auto-save:', {
           promptLength: promptUsed?.length,
           hasBase64: !!imageBase64,
           base64Length: imageBase64?.length
         });
-        
+
         if (promptUsed && imageBase64) {
           triggerAutoSaveToDrive(promptUsed, imageBase64);
         } else {
@@ -2246,7 +2254,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       } else {
         console.log('ℹ️ Auto-save not triggered:', shouldAutoSave ? 'No imageUrl' : 'Checkbox not checked');
       }
-      
+
       getElement<HTMLFormElement>('imageForm').style.display = 'none';
       console.log('✅ Image generation completed');
       break;
@@ -2261,32 +2269,32 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
           ✅ ${(msg.message as string) || 'Image generated successfully!'}
         </div>
       `;
-      
+
       // Auto-save to Drive logic
       const autoSaveCheckbox = document.getElementById('autoSaveDrive') as HTMLInputElement;
       const shouldAutoSave = autoSaveCheckbox && autoSaveCheckbox.checked;
-      
+
       console.log('🔍 [image-complete] Auto-save check:', {
         shouldAutoSave,
         hasPrompt: !!msg.prompt,
         hasImageBase64: !!msg.imageBase64,
         messageKeys: Object.keys(msg)
       });
-      
+
       if (shouldAutoSave && msg.prompt && msg.imageBase64) {
         const promptUsed = msg.prompt as string;
         const imageBase64 = msg.imageBase64 as string;
-        
+
         console.log('📤 [image-complete] Triggering auto-save with existing image');
-        
+
         // Enviar MESMA imagem (já gerada) para o Drive com AI naming
         triggerAutoSaveToDrive(promptUsed, imageBase64);
       } else {
-        console.log('ℹ️ [image-complete] Auto-save not triggered:', 
-          !shouldAutoSave ? 'Checkbox not checked' : 
-          !msg.prompt ? 'No prompt' : 'No imageBase64');
+        console.log('ℹ️ [image-complete] Auto-save not triggered:',
+          !shouldAutoSave ? 'Checkbox not checked' :
+            !msg.prompt ? 'No prompt' : 'No imageBase64');
       }
-      
+
       getElement<HTMLFormElement>('imageForm').style.display = 'none';
       console.log('✅ Image generation completed');
       break;
@@ -2317,26 +2325,26 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
         nodeName: string;
         imageBase64: string;
       }>;
-      
+
       console.log(`🎯 Received ${images.length} images for granular editing`);
-      
+
       // Reset analyze button
       const analyzeBtn = getElement<HTMLButtonElement>('analyzeFrameForGranularBtn');
       analyzeBtn.disabled = false;
       analyzeBtn.textContent = '🔍 Analyze Frame for Editing';
-      
+
       if (images.length === 0) {
         showResult('No images found in the selected frame.', 'error', 'resultGranularEdit');
         return;
       }
-      
+
       // Transform and render images
       const granularImages = images.map(img => ({
         ...img,
         customPrompt: '',
         selected: true
       }));
-      
+
       (window as any).showGranularImageList();
       (window as any).renderGranularImageList(granularImages);
       break;
@@ -2401,10 +2409,10 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       const hasTokens = Boolean(msg.hasTokens);
       const folderId = msg.folderId as string;
       const driveUI = (window as any).driveUI;
-      
+
       // Update Drive status indicator in Image Generation card
       updateDriveStatusIndicator(hasTokens, folderId);
-      
+
       if (hasTokens) {
         driveUI.showConnectedState();
         if (folderId) {
@@ -2421,12 +2429,12 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       const authUrl = msg.url as string;
       const requestId = msg.requestId as string;
       const driveUI = (window as any).driveUI;
-      
+
       console.log('🔗 Auth URL ready:', authUrl);
-      
+
       // Show connecting state with URL
       driveUI.showConnectingState(authUrl);
-      
+
       // Start polling
       driveUI.startPolling(requestId);
       break;
@@ -2436,16 +2444,16 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       // Successfully authenticated via polling
       const tokens = msg.tokens;
       const driveUI = (window as any).driveUI;
-      
+
       console.log('✅ Authentication successful!');
       driveUI.stopPolling();
-      
+
       // Save tokens via plugin
       postPluginMessage({
         type: 'save-drive-tokens',
         tokens
       });
-      
+
       driveUI.showConnectedState();
       // Update status indicator in Settings section
       updateDriveStatusIndicator(true);
@@ -2456,7 +2464,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       // Error during authentication
       const errorMsg = (msg.message as string) || 'Unknown error during authentication';
       const driveUI = (window as any).driveUI;
-      
+
       console.error('❌ Authentication error:', errorMsg);
       driveUI.stopPolling();
       driveUI.showErrorState(errorMsg);
@@ -2491,7 +2499,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       // Create upload task (closure)
       const uploadTask = async (): Promise<void> => {
         const backendUrl = getElement<HTMLInputElement>('backendUrl').value || 'http://localhost:3000/api';
-        
+
         try {
           const res = await fetch(`${backendUrl}/drive/upload`, {
             method: 'POST',
@@ -2510,10 +2518,10 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
           }
 
           const data = await res.json();
-          
+
           if (data.success) {
             console.log(`✅ Uploaded: ${frameName}`);
-            
+
             // If tokens were refreshed, save them
             if (data.refreshedTokens) {
               console.log('🔄 Saving refreshed tokens...');
@@ -2522,7 +2530,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
                 tokens: data.refreshedTokens
               });
             }
-            
+
             // Notify plugin that this frame is done (optional, not blocking)
             postPluginMessage({
               type: 'drive-export-frame-complete',
@@ -2536,7 +2544,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
         } catch (error: any) {
           console.error(`❌ Error uploading ${frameName}:`, error);
           uploadQueueManager.recordFailure();
-          
+
           // Notify plugin of failure (optional)
           postPluginMessage({
             type: 'drive-export-frame-complete',
@@ -2544,7 +2552,7 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
             frameName,
             error: error.message
           });
-          
+
           throw error; // Re-throw to be caught by queue manager
         }
       };
@@ -2594,11 +2602,11 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
       const resultDiv = getElement<HTMLDivElement>('resultImage');
       const filename = typeof msg.filename === 'string' ? msg.filename : 'image';
       const fileUrl = typeof msg.fileUrl === 'string' ? msg.fileUrl : '';
-      
-      const linkHtml = fileUrl 
+
+      const linkHtml = fileUrl
         ? `<a href="${fileUrl}" target="_blank" style="color: #1e40af; text-decoration: underline;">Open in Drive</a>`
         : '';
-      
+
       resultDiv.innerHTML += `
         <div class="result success" style="margin-top:8px;">
           ✅ Saved to Drive: <b>${filename}</b> ${linkHtml}
@@ -2660,7 +2668,7 @@ function updateDriveStatusIndicator(hasTokens: boolean, folderId?: string): void
   const statusMessage = document.getElementById('driveStatusMessage');
   const settingsConnectBtn = document.getElementById('settingsConnectDriveBtn') as HTMLButtonElement;
   const settingsDisconnectBtn = document.getElementById('settingsDisconnectDriveBtn') as HTMLButtonElement;
-  
+
   if (statusIcon && statusMessage) {
     if (hasTokens) {
       // Connected state
@@ -2669,7 +2677,7 @@ function updateDriveStatusIndicator(hasTokens: boolean, folderId?: string): void
       statusMessage.style.color = '#059669';
       statusMessage.style.background = '#f0fdf4';
       statusMessage.style.borderColor = '#bbf7d0';
-      
+
       // Show disconnect, hide connect
       if (settingsConnectBtn) settingsConnectBtn.style.display = 'none';
       if (settingsDisconnectBtn) settingsDisconnectBtn.style.display = 'inline-block';
@@ -2680,7 +2688,7 @@ function updateDriveStatusIndicator(hasTokens: boolean, folderId?: string): void
       statusMessage.style.color = '#64748b';
       statusMessage.style.background = '#f8fafc';
       statusMessage.style.borderColor = '#e2e8f0';
-      
+
       const scrollLink = document.getElementById('scrollToDriveSetup');
       if (scrollLink) {
         scrollLink.addEventListener('click', (e) => {
@@ -2688,7 +2696,7 @@ function updateDriveStatusIndicator(hasTokens: boolean, folderId?: string): void
           scrollToDriveCard();
         });
       }
-      
+
       // Show connect, hide disconnect
       if (settingsConnectBtn) settingsConnectBtn.style.display = 'inline-block';
       if (settingsDisconnectBtn) settingsDisconnectBtn.style.display = 'none';
@@ -2830,41 +2838,41 @@ function initImageBankBrowser(): void {
   function parseFilename(filename: string): { source: string; age: string; color: string; action: string; displayLabel: string; isStructured: boolean } {
     try {
       console.log(`🔍 Parsing filename: "${filename}"`);
-      
+
       // Remove extension
       const nameWithoutExt = filename.replace(/\.(png|jpg|jpeg|gif|webp)$/i, '');
       console.log(`  📝 Without extension: "${nameWithoutExt}"`);
-      
+
       // Split by underscore
       const parts = nameWithoutExt.split('_');
       console.log(`  🔢 Parts:`, parts);
       console.log(`  📊 Parts length: ${parts.length}, parts[0]: "${parts[0]}", parts[1]: "${parts[1]}"`);
-      
+
       // Validate format: {ai/stock}_{puppy/dog/adult}_{color}_{action}
       // Must have at least 4 parts: prefix_type_color_action
       if (parts.length >= 4) {
         const prefix = parts[0].toLowerCase();
         const type = parts[1].toLowerCase();
-        
+
         // Check if it matches the new convention
         const validPrefixes = ['ai', 'stock'];
         const validTypes = ['puppy', 'dog', 'adult'];
-        
+
         if (validPrefixes.includes(prefix) && validTypes.includes(type)) {
           // New format: {ai/stock}_{puppy/dog/adult}_{color}_{action}
           const color = parts[2]?.trim() || 'unknown';
-          
+
           // Action can be multi-word: join everything after index 3
           // Example: ai_puppy_black_laying_down → "laying down"
           const actionParts = parts.slice(3).filter(p => p.trim().length > 0);
-          const action = actionParts.length > 0 
-            ? actionParts.join(' ').trim() 
+          const action = actionParts.length > 0
+            ? actionParts.join(' ').trim()
             : 'unknown';
-          
+
           // Map type to age-friendly label
           // puppy → puppy, dog → adult, adult → adult
           const age = type === 'puppy' ? 'puppy' : 'adult';
-          
+
           const result = {
             source: prefix.toLowerCase(),
             age: age.toLowerCase(),
@@ -2873,24 +2881,24 @@ function initImageBankBrowser(): void {
             displayLabel: `${prefix.toUpperCase()} ${age} ${color} ${action}`,
             isStructured: true
           };
-          
+
           console.log(`  ✅ Parsed successfully (new format):`, result);
           return result;
         }
-        
+
         // Legacy format check: {age}_{color}_{action}
         // This handles old files like "adult_black_sitting" or "puppy_brown_sitting"
         const legacyType = parts[0].toLowerCase();
         if (validTypes.includes(legacyType)) {
           const age = legacyType === 'puppy' ? 'puppy' : 'adult';
           const color = parts[1]?.trim() || 'unknown';
-          
+
           // Action is everything after color
           const actionParts = parts.slice(2).filter(p => p.trim().length > 0);
-          const action = actionParts.length > 0 
-            ? actionParts.join(' ').trim() 
+          const action = actionParts.length > 0
+            ? actionParts.join(' ').trim()
             : 'unknown';
-          
+
           const result = {
             source: 'unknown',
             age: age.toLowerCase(),
@@ -2899,19 +2907,19 @@ function initImageBankBrowser(): void {
             displayLabel: `${age} ${color} ${action}`,
             isStructured: true
           };
-          
+
           console.log(`  ✅ Parsed successfully (legacy format):`, result);
           return result;
         }
-        
+
         // Another legacy check: starts with "adult" (e.g., "adult_black_sitting")
         if (legacyType === 'adult') {
           const color = parts[1]?.trim() || 'unknown';
           const actionParts = parts.slice(2).filter(p => p.trim().length > 0);
-          const action = actionParts.length > 0 
-            ? actionParts.join(' ').trim() 
+          const action = actionParts.length > 0
+            ? actionParts.join(' ').trim()
             : 'unknown';
-          
+
           const result = {
             source: 'unknown',
             age: 'adult',
@@ -2920,7 +2928,7 @@ function initImageBankBrowser(): void {
             displayLabel: `adult ${color} ${action}`,
             isStructured: true
           };
-          
+
           console.log(`  ✅ Parsed successfully (adult legacy format):`, result);
           return result;
         }
@@ -2955,7 +2963,7 @@ function initImageBankBrowser(): void {
   // Only includes valid values, excludes "unknown"
   function populateFilters(images: ParsedImage[]): void {
     console.log(`📊 Populating filters for ${images.length} images`);
-    
+
     const sources = new Set<string>();
     const ages = new Set<string>();
     const colors = new Set<string>();
@@ -2963,7 +2971,7 @@ function initImageBankBrowser(): void {
 
     images.forEach(img => {
       console.log(`  Image: ${img.name} → source:"${img.source}" age:"${img.age}" color:"${img.color}" action:"${img.action}"`);
-      
+
       // Only add non-unknown values
       if (img.source && img.source !== 'unknown') {
         sources.add(img.source);
@@ -2983,11 +2991,11 @@ function initImageBankBrowser(): void {
       }
     });
 
-    console.log(`📋 Final sets:`, { 
+    console.log(`📋 Final sets:`, {
       sources: Array.from(sources),
-      ages: Array.from(ages), 
-      colors: Array.from(colors), 
-      actions: Array.from(actions) 
+      ages: Array.from(ages),
+      colors: Array.from(colors),
+      actions: Array.from(actions)
     });
 
     // Helper to capitalize first letter
@@ -3274,20 +3282,20 @@ function initImageBankBrowser(): void {
       populateFilters(allImages);
       filteredImages = allImages;
       renderImageGrid();
-      
+
       // Re-enable filters
       filterSource.disabled = false;
       filterAge.disabled = false;
       filterColor.disabled = false;
       filterAction.disabled = false;
-      
+
       statusDiv.style.display = 'block';
       statusDiv.className = 'result success';
       statusDiv.textContent = `✅ Loaded ${filteredImages.length} image(s) from Image Bank`;
 
     } catch (error) {
       console.error('Load images error:', error);
-      
+
       // Reset filters on error
       filterSource.innerHTML = '<option value="">All</option>';
       filterSource.disabled = false;
@@ -3297,7 +3305,7 @@ function initImageBankBrowser(): void {
       filterColor.disabled = false;
       filterAction.innerHTML = '<option value="">All</option>';
       filterAction.disabled = false;
-      
+
       statusDiv.style.display = 'block';
       statusDiv.className = 'result error';
       statusDiv.textContent = `❌ ${error instanceof Error ? error.message : 'Unknown error'}`;

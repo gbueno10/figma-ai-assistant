@@ -4,6 +4,7 @@ import cors, { CorsOptions } from 'cors';
 import designRoutes from './routes/designRoutes';
 import imageRoutes from './routes/imageRoutes';
 import driveRoutes from './routes/driveRoutes';
+import { validateKeys } from './utils/apiKey';
 
 const app = express();
 
@@ -72,9 +73,15 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
 const PORT = Number(process.env.PORT) || 3000;
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Figma AI Assistant backend listening on port ${PORT}`);
-  });
+  try {
+    validateKeys();
+    app.listen(PORT, () => {
+      console.log(`Figma AI Assistant backend listening on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server due to missing API keys:', error);
+    process.exit(1);
+  }
 }
 
 export default app;

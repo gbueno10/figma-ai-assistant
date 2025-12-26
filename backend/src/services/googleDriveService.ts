@@ -23,7 +23,7 @@ export class GoogleDriveService {
       redirectUri || 'http://localhost:3000/oauth2callback'
     );
   }
-  
+
   /**
    * Check if Google Drive is properly configured
    */
@@ -84,7 +84,7 @@ export class GoogleDriveService {
 
       // Convert Buffer to Readable stream
       const readable = new Readable();
-      readable._read = () => {}; // Required but can be no-op
+      readable._read = () => { }; // Required but can be no-op
       readable.push(fileBuffer);
       readable.push(null);
 
@@ -99,6 +99,7 @@ export class GoogleDriveService {
           body: readable,
         },
         fields: 'id, webViewLink',
+        supportsAllDrives: true,
       });
 
       return {
@@ -158,7 +159,7 @@ export class GoogleDriveService {
         }
 
         pageToken = response.data.nextPageToken;
-        
+
         // Log progress for large folders
         if (pageToken) {
           console.log(`📄 Fetched ${allFiles.length} images so far, continuing...`);
@@ -189,7 +190,7 @@ export class GoogleDriveService {
       const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
 
       const response = await drive.files.get(
-        { fileId, alt: 'media' },
+        { fileId, alt: 'media', supportsAllDrives: true },
         { responseType: 'arraybuffer' }
       );
 

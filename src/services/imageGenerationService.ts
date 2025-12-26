@@ -209,7 +209,7 @@ export class ImageGenerationService {
     y = 0,
     name = 'AI Generated Image',
     targetFrame: FrameNode | null = null
-  ): Promise<void> {
+  ): Promise<RectangleNode | null> {
     console.log(`🎨 [FIGMA-CREATE] Creating image in Figma at position (${x}, ${y})`);
 
     try {
@@ -247,6 +247,7 @@ export class ImageGenerationService {
       figma.viewport.scrollAndZoomIntoView([rect]);
 
       console.log(`✅ [FIGMA-CREATE] Image created successfully: ${rect.id}`);
+      return rect;
     } catch (error) {
       console.log(`❌ [FIGMA-CREATE] Creation error:`, error);
       throw new Error(

@@ -7,3 +7,16 @@ export function resolveApiKey(providedKey?: string): string {
   }
   return key;
 }
+
+export function validateKeys(): void {
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn('WARNING: OPENAI_API_KEY is not set.');
+  }
+  if (!process.env.RUNWARE_API_KEY) {
+    console.warn('WARNING: RUNWARE_API_KEY is not set.');
+  }
+
+  if (!process.env.OPENAI_API_KEY && !process.env.RUNWARE_API_KEY) {
+    throw new Error('Neither OPENAI_API_KEY nor RUNWARE_API_KEY are provided.');
+  }
+}

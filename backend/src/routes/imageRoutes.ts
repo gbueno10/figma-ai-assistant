@@ -4,6 +4,7 @@ import {
   editImage,
   generateImage,
   regenerateImage,
+  generateVideo,
 } from '../services/imageService';
 
 const router = Router();
@@ -141,6 +142,35 @@ router.post('/edit', async (req, res, next) => {
     res.json(result);
   } catch (error) {
     console.error('[Images][edit] Failed', error);
+    next(error);
+  }
+});
+
+router.post('/video', async (req, res, next) => {
+  try {
+    const { prompt, apiKey } = req.body ?? {};
+
+    console.log('[Images][video] Incoming request', {
+      promptLength: typeof prompt === 'string' ? prompt.length : 'invalid',
+      providedApiKey: Boolean(apiKey),
+    });
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'Field "prompt" is required and must be a string.' });
+    }
+
+    const result = await generateVideo({
+      prompt,
+      apiKey,
+    });
+
+    console.log('[Images][video] Completed', {
+      videoURL: result?.videoURL,
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('[Images][video] Failed', error);
     next(error);
   }
 });

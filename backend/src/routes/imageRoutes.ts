@@ -11,13 +11,14 @@ const router = Router();
 
 router.post('/generate', async (req, res, next) => {
   try {
-    const { prompt, size, transparent, apiKey } = req.body ?? {};
+    const { prompt, size, transparent, apiKey, runwareApiKey, model } = req.body ?? {};
 
     console.log('[Images][generate] Incoming request', {
       promptLength: typeof prompt === 'string' ? prompt.length : 'invalid',
       size,
       transparent: Boolean(transparent),
       providedApiKey: Boolean(apiKey),
+      providedRunwareApiKey: Boolean(runwareApiKey),
     });
 
     if (!prompt || typeof prompt !== 'string') {
@@ -29,6 +30,8 @@ router.post('/generate', async (req, res, next) => {
       size,
       transparent: Boolean(transparent),
       apiKey,
+      runwareApiKey,
+      model,
     });
 
     console.log('[Images][generate] Completed', {
@@ -68,13 +71,14 @@ router.post('/analyze', async (req, res, next) => {
 
 router.post('/regenerate', async (req, res, next) => {
   try {
-    const { imageBase64, prompt, size, apiKey } = req.body ?? {};
+    const { imageBase64, prompt, size, apiKey, runwareApiKey, model } = req.body ?? {};
 
     console.log('[Images][regenerate] Incoming request', {
       imageLength: typeof imageBase64 === 'string' ? imageBase64.length : 'invalid',
       promptProvided: Boolean(prompt),
       size,
       providedApiKey: Boolean(apiKey),
+      providedRunwareApiKey: Boolean(runwareApiKey),
     });
 
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -86,6 +90,8 @@ router.post('/regenerate', async (req, res, next) => {
       prompt,
       size,
       apiKey,
+      runwareApiKey,
+      model,
     });
 
     console.log('[Images][regenerate] Completed', {
@@ -102,13 +108,14 @@ router.post('/regenerate', async (req, res, next) => {
 
 router.post('/edit', async (req, res, next) => {
   try {
-    const { imageBase64, prompt, size, apiKey, totalImages, imageIndex, nodeName } = req.body ?? {};
+    const { imageBase64, prompt, size, apiKey, runwareApiKey, totalImages, imageIndex, nodeName, model } = req.body ?? {};
 
     console.log('[Images][edit] Incoming request', {
       imageLength: typeof imageBase64 === 'string' ? imageBase64.length : 'invalid',
       promptLength: typeof prompt === 'string' ? prompt.length : 'invalid',
       size,
       providedApiKey: Boolean(apiKey),
+      providedRunwareApiKey: Boolean(runwareApiKey),
       totalImages,
       imageIndex,
       nodeName,
@@ -127,9 +134,11 @@ router.post('/edit', async (req, res, next) => {
       prompt,
       size,
       apiKey,
+      runwareApiKey,
       totalImages,
       imageIndex,
       nodeName,
+      model,
     });
 
     console.log('[Images][edit] Completed', {
@@ -148,11 +157,12 @@ router.post('/edit', async (req, res, next) => {
 
 router.post('/video', async (req, res, next) => {
   try {
-    const { prompt, apiKey } = req.body ?? {};
+    const { prompt, apiKey, runwareApiKey } = req.body ?? {};
 
     console.log('[Images][video] Incoming request', {
       promptLength: typeof prompt === 'string' ? prompt.length : 'invalid',
       providedApiKey: Boolean(apiKey),
+      providedRunwareApiKey: Boolean(runwareApiKey),
     });
 
     if (!prompt || typeof prompt !== 'string') {
@@ -162,6 +172,7 @@ router.post('/video', async (req, res, next) => {
     const result = await generateVideo({
       prompt,
       apiKey,
+      runwareApiKey,
     });
 
     console.log('[Images][video] Completed', {

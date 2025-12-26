@@ -21,6 +21,8 @@ interface EditImageMetadata {
   totalImages?: number;
   imageIndex?: number;
   nodeName?: string;
+  model?: string;
+  runwareApiKey?: string;
 }
 
 export class ImageGenerationService {
@@ -122,14 +124,18 @@ export class ImageGenerationService {
     prompt: string,
     apiKey?: string,
     size = '1024x1024',
-    transparent = false
+    transparent = false,
+    model?: string,
+    runwareApiKey?: string
   ): Promise<Uint8Array> {
-    console.log('🎨 Requesting image generation from backend...');
+    console.log(`🎨 Requesting image generation (${model || 'default'}) from backend...`);
     const response = await postToBackend<GenerateImageResponse>('/images/generate', {
       prompt,
       size,
       transparent,
       apiKey,
+      model,
+      runwareApiKey,
     });
     console.log('✅ Backend returned generated image');
     return this.base64ToUint8Array(response.base64);
@@ -139,25 +145,31 @@ export class ImageGenerationService {
     prompt: string,
     apiKey?: string,
     size = '1024x1024',
-    transparent = false
+    transparent = false,
+    model?: string,
+    runwareApiKey?: string
   ): Promise<Uint8Array> {
-    return this.generateImageAsBase64(prompt, apiKey, size, transparent);
+    return this.generateImageAsBase64(prompt, apiKey, size, transparent, model, runwareApiKey);
   }
 
   static async generateImageWithFallback(
     prompt: string,
     apiKey?: string,
     size = '1024x1024',
-    transparent = false
+    transparent = false,
+    model?: string,
+    runwareApiKey?: string
   ): Promise<Uint8Array> {
-    return this.generateImageAsBase64(prompt, apiKey, size, transparent);
+    return this.generateImageAsBase64(prompt, apiKey, size, transparent, model, runwareApiKey);
   }
 
   static async regenerateImage(
     imageBytes: Uint8Array,
     apiKey?: string,
     customPrompt?: string,
-    size = '1024x1024'
+    size = '1024x1024',
+    model?: string,
+    runwareApiKey?: string
   ): Promise<Uint8Array> {
     console.log('🔄 Requesting image regeneration from backend...');
     const base64 = this.uint8ArrayToBase64(imageBytes);
@@ -166,6 +178,8 @@ export class ImageGenerationService {
       prompt: customPrompt,
       size,
       apiKey,
+      model,
+      runwareApiKey,
     });
     console.log('✅ Backend returned regenerated image');
     return this.base64ToUint8Array(response.base64);
@@ -175,9 +189,11 @@ export class ImageGenerationService {
     prompt: string,
     apiKey?: string,
     size = '1024x1024',
-    transparent = false
+    transparent = false,
+    model?: string,
+    runwareApiKey?: string
   ): Promise<string> {
-    const bytes = await this.generateImageAsBase64(prompt, apiKey, size, transparent);
+    const bytes = await this.generateImageAsBase64(prompt, apiKey, size, transparent, model, runwareApiKey);
     return `data:image/png;base64,${this.uint8ArrayToBase64(bytes)}`;
   }
 
@@ -198,6 +214,8 @@ export class ImageGenerationService {
       totalImages: metadata?.totalImages,
       imageIndex: metadata?.imageIndex,
       nodeName: metadata?.nodeName,
+      model: metadata?.model,
+      runwareApiKey: metadata?.runwareApiKey,
     });
     console.log('✅ Backend returned edited image');
     return this.base64ToUint8Array(response.base64);

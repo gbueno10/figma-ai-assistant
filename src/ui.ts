@@ -652,6 +652,120 @@ button.secondary:hover {
   cursor: pointer;
 }
 
+/* Image Bank Browser Styles */
+.image-bank-filters {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.filter-group select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  background-color: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.filter-group select:focus {
+  border-color: #667eea;
+  background-color: white;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.image-bank-grid-container {
+  margin-top: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.image-bank-header {
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.image-bank-images {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: #e2e8f0;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.image-bank-item {
+  aspect-ratio: 1;
+  background: white;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.image-bank-item:hover {
+  z-index: 10;
+  transform: scale(1.05);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.image-bank-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-bank-item-name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+  color: white;
+  font-size: 9px;
+  padding: 12px 6px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.image-bank-item:hover .image-bank-item-name {
+  opacity: 1;
+}
+
+.image-bank-downloading {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
 .granular-select-all input {
   width: 16px;
   height: 16px;
@@ -705,6 +819,10 @@ const template = `
         <div class="form-group">
           <label for="apiKey">OpenAI API Key:</label>
           <input type="password" id="apiKey" placeholder="sk-...">
+        </div>
+        <div class="form-group">
+          <label for="runwareApiKey">Runware API Key:</label>
+          <input type="password" id="runwareApiKey" placeholder="Runware API Key">
           <div class="api-key-info">
             🔒 Stored locally and securely
           </div>
@@ -859,6 +977,13 @@ const template = `
             <option value="1024x1024">Square (1024x1024)</option>
             <option value="1024x1792">Portrait (1024x1792)</option>
             <option value="1792x1024">Landscape (1792x1024)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="imageModel">Model:</label>
+          <select id="imageModel">
+            <option value="google:4@2">Nano Banana 2</option>
+            <option value="openai:4@1">GPT Image 1.5</option>
           </select>
         </div>
         <button type="submit" id="generateBtn">
@@ -1048,34 +1173,34 @@ const template = `
 
   <!-- 🐶 Image Bank Browser -->
   <div class="ai-card">
-    <h2>🐶 Image Bank Browser</h2>
+    <div class="card-title">🐶 Image Bank Browser</div>
     <div class="card-description">
       Browse and swap images from your Google Drive Image Bank. Select an element and click an image to replace it.
     </div>
 
     <!-- Filters -->
-    <div style="margin: 16px 0; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px;">
-      <div>
-        <label for="filterSource" style="display: block; font-size: 11px; color: #64748b; margin-bottom: 4px;">Source:</label>
-        <select id="filterSource" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12px;">
+    <div class="image-bank-filters">
+      <div class="filter-group">
+        <label for="filterSource">Source</label>
+        <select id="filterSource">
           <option value="">All</option>
         </select>
       </div>
-      <div>
-        <label for="filterAge" style="display: block; font-size: 11px; color: #64748b; margin-bottom: 4px;">Age:</label>
-        <select id="filterAge" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12px;">
+      <div class="filter-group">
+        <label for="filterAge">Age</label>
+        <select id="filterAge">
           <option value="">All</option>
         </select>
       </div>
-      <div>
-        <label for="filterColor" style="display: block; font-size: 11px; color: #64748b; margin-bottom: 4px;">Color:</label>
-        <select id="filterColor" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12px;">
+      <div class="filter-group">
+        <label for="filterColor">Color</label>
+        <select id="filterColor">
           <option value="">All</option>
         </select>
       </div>
-      <div>
-        <label for="filterAction" style="display: block; font-size: 11px; color: #64748b; margin-bottom: 4px;">Action:</label>
-        <select id="filterAction" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12px;">
+      <div class="filter-group">
+        <label for="filterAction">Action</label>
+        <select id="filterAction">
           <option value="">All</option>
         </select>
       </div>
@@ -1087,26 +1212,28 @@ const template = `
     </button>
 
     <!-- Loading State -->
-    <div id="imageBankLoading" style="display: none; margin-top: 12px; text-align: center; color: #64748b;">
-      <div style="font-size: 24px; margin-bottom: 8px;">⏳</div>
-      <div>Loading images...</div>
+    <div id="imageBankLoading" class="loading" style="display: none;">
+      <div class="spinner"></div>
+      <div style="margin-top: 12px;">Loading Image Bank...</div>
     </div>
 
-    <!-- Image Grid -->
-    <div id="imageBankGrid" style="display: none; margin-top: 16px; max-height: 400px; overflow-y: auto;">
-      <div id="imageBankCount" style="font-size: 12px; color: #64748b; margin-bottom: 12px;"></div>
-      <div id="imageBankImages" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;"></div>
+    <!-- Image Grid Container -->
+    <div id="imageBankGrid" class="image-bank-grid-container" style="display: none;">
+      <div class="image-bank-header">
+        <div id="imageBankCount" style="font-size: 12px; font-weight: 600; color: #1e293b;"></div>
+      </div>
+      <div id="imageBankImages" class="image-bank-images"></div>
     </div>
 
     <!-- Empty State -->
-    <div id="imageBankEmpty" style="display: none; margin-top: 16px; text-align: center; padding: 24px; background: #f8fafc; border-radius: 8px; color: #64748b;">
-      <div style="font-size: 32px; margin-bottom: 8px;">📁</div>
-      <div>No images found in Image Bank</div>
-      <div style="font-size: 12px; margin-top: 4px;">Make sure your Image Bank folder has images</div>
+    <div id="imageBankEmpty" class="empty-state" style="display: none;">
+      <div class="empty-icon">📁</div>
+      <div class="empty-text">No images found in Image Bank</div>
+      <div class="empty-subtext">Check your folder configuration in Settings</div>
     </div>
 
     <!-- Status Message -->
-    <div id="imageBankStatus" style="display: none; margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 13px;"></div>
+    <div id="imageBankStatus" class="result" style="display: none;"></div>
   </div>
 
     <button id="closeBtn" class="secondary">❌ Close Assistant</button>
@@ -1280,9 +1407,14 @@ function saveSettings(): void {
   const exportsFolder = getElement<HTMLInputElement>('exportsFolder').value.trim();
   const imageBankFolder = getElement<HTMLInputElement>('imageBankFolder').value.trim();
 
+  const runwareApiKey = getElement<HTMLInputElement>('runwareApiKey').value.trim();
+  const imageModel = getElement<HTMLSelectElement>('imageModel').value;
+
   postPluginMessage({
     type: 'save-settings',
     apiKey,
+    runwareApiKey,
+    imageModel,
     backendUrl,
     exportsFolder,
     imageBankFolder
@@ -1401,11 +1533,16 @@ function initImageGeneration(): void {
 
     resetProgress('progressBarImage', 'progressTextImage', 'Starting image generation...');
 
+    const runwareApiKey = getElement<HTMLInputElement>('runwareApiKey').value.trim();
+    const model = getElement<HTMLSelectElement>('imageModel').value;
+
     postPluginMessage({
       type: mode === 'new' ? 'generate-image' : 'regenerate-images',
       prompt,
       size,
-      apiKey
+      apiKey,
+      runwareApiKey,
+      model
     });
   });
 }
@@ -2088,17 +2225,26 @@ function handlePluginMessage(msg: PluginToUiMessage): void {
         break;
       }
       const apiKeyInput = getElement<HTMLInputElement>('apiKey');
+      const runwareApiKeyInput = getElement<HTMLInputElement>('runwareApiKey');
       const backendUrlInput = getElement<HTMLInputElement>('backendUrl');
       const exportsFolderInput = getElement<HTMLInputElement>('exportsFolder');
       const imageBankFolderInput = getElement<HTMLInputElement>('imageBankFolder');
+      const imageModelSelect = getElement<HTMLSelectElement>('imageModel');
 
       apiKeyInput.value = (msg.apiKey as string) || '';
+      runwareApiKeyInput.value = (msg.runwareApiKey as string) || '';
       backendUrlInput.value = (msg.backendUrl as string) || 'http://localhost:3000/api';
       exportsFolderInput.value = (msg.exportsFolder as string) || '';
       imageBankFolderInput.value = (msg.imageBankFolder as string) || '';
+      if (imageModelSelect && msg.imageModel) {
+        imageModelSelect.value = msg.imageModel as string;
+      }
 
       console.log(
         apiKeyInput.value ? '✅ API key loaded' : 'ℹ️ API key not set (using backend configuration)'
+      );
+      console.log(
+        runwareApiKeyInput.value ? '✅ Runware API key loaded' : 'ℹ️ Runware API key not set'
       );
       console.log(`✅ Backend URL loaded: ${backendUrlInput.value}`);
       console.log(`✅ Exports Folder: ${exportsFolderInput.value || 'not set'}`);

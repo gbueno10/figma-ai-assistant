@@ -4,7 +4,7 @@
   "description": "Backend service for the Figma AI Assistant plugin",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only --ignore-watch node_modules src/index.ts",
     "build": "tsc --project tsconfig.json",
     "start": "node dist/index.js"
   },

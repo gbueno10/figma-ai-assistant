@@ -19,6 +19,8 @@ interface ImageGenerationInput {
   size?: SupportedImageSize | null;
   transparent?: boolean;
   apiKey?: string;
+  runwareApiKey?: string;
+  model?: string;
 }
 
 interface ImageGenerationOutput {
@@ -30,6 +32,8 @@ interface ImageRegenerationInput {
   prompt?: string;
   size?: SupportedImageSize | null;
   apiKey?: string;
+  runwareApiKey?: string;
+  model?: string;
 }
 
 interface ImageRegenerationOutput {
@@ -42,9 +46,11 @@ interface ImageEditInput {
   prompt: string;
   size?: SupportedImageSize | null;
   apiKey?: string;
+  runwareApiKey?: string;
   totalImages?: number;
   imageIndex?: number;
   nodeName?: string;
+  model?: string;
 }
 
 interface ImageEditOutput {
@@ -71,13 +77,18 @@ export async function generateImage({
   size = '1024x1024',
   transparent = false,
   apiKey,
+  runwareApiKey,
+  model = 'runware:100@1',
 }: ImageGenerationInput): Promise<ImageGenerationOutput> {
   const adjustedPrompt = transparent
     ? `${prompt}, isolated subject, transparent background`
     : prompt;
 
   try {
-    const images = await runwareService.generateImage(adjustedPrompt, size ?? '1024x1024');
+    // All image generation is now routed through Runware
+    console.log(`🎨 Generating image via Runware. Model: ${model}, Prompt: ${adjustedPrompt.substring(0, 50)}...`);
+
+    const images = await runwareService.generateImage(adjustedPrompt, size ?? '1024x1024', model, runwareApiKey);
     const image = Array.isArray(images) ? images[0] : undefined;
 
     if (!image || !image.imageURL) {
@@ -165,6 +176,8 @@ export async function regenerateImage({
   prompt,
   size = '1024x1024',
   apiKey,
+  runwareApiKey,
+  model,
 }: ImageRegenerationInput): Promise<ImageRegenerationOutput> {
   const key = resolveApiKey(apiKey);
   const promptToUse = prompt && prompt.trim().length > 0
@@ -176,6 +189,8 @@ export async function regenerateImage({
     size,
     transparent: false,
     apiKey: key,
+    runwareApiKey,
+    model,
   });
 
   return { base64, promptUsed: promptToUse };
@@ -186,9 +201,11 @@ export async function editImage({
   prompt,
   size = '1024x1024',
   apiKey,
+  runwareApiKey,
   totalImages,
   imageIndex,
   nodeName,
+  model,
 }: ImageEditInput): Promise<ImageEditOutput> {
   // For now, Runware might not have a direct 'edit' like OpenAI's mask-based edit in the SDK easily
   // If the requirement is "exclusively part of generation and editing", and Runware supports img2img
@@ -197,10 +214,7 @@ export async function editImage({
   // If editing is also mandatory for Runware, I'll use requestImages with an input image if available.
 
   try {
-    // Placeholder for Runware editing logic if applicable, otherwise fallback or similar
-    // Runware typically uses requestImages with 'image' or similar for img2img
-    // Since I don't have the full SDK docs handy for 'edit', I'll use a standard img2img approach if supported.
-    const images = await runwareService.generateImage(prompt, size ?? '1024x1024'); // Simplified for now
+    const images = await runwareService.generateImage(prompt, size ?? '1024x1024', model, runwareApiKey); // Simplified for now
     const image = Array.isArray(images) ? images[0] : undefined;
 
     if (!image || !image.imageURL) {
@@ -220,9 +234,10 @@ export async function editImage({
 export async function generateVideo({
   prompt,
   apiKey,
-}: { prompt: string; apiKey?: string }): Promise<{ videoURL: string }> {
+  runwareApiKey,
+}: { prompt: string; apiKey?: string; runwareApiKey?: string }): Promise<{ videoURL: string }> {
   try {
-    const response = await runwareService.generateVideo(prompt);
+    const response = await runwareService.generateVideo(prompt, runwareApiKey);
     const result = Array.isArray(response) ? response[0] : undefined;
     const videoURL = (result as any)?.videoURL;
 

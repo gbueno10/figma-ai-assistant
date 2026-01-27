@@ -439,7 +439,7 @@ export class DesignModificationHandler {
    * - Múltiplos tipos: Redução proporcional
    *
    * Benefícios:
-   * - Menor latência na comunicação com GPT-5
+   * - Menor latência na comunicação com GPT-5 mini
    * - Menor custo de tokens (menos input tokens)
    * - Respostas mais rápidas e focadas da IA
    */

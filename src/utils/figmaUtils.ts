@@ -6,91 +6,121 @@
 import { NamingUtils } from './namingConvention';
 
 /**
- * Encontra o nó correspondente em um frame duplicado
- * Compara tipo, nome e posição relativa para localizar o "gêmeo" do nó original
+ * 🔒 CORREÇÃO CRÍTICA: Tagger de UUIDs para mapeamento robusto
+ *
+ * Percorre recursivamente TODOS os nós de um frame e marca cada um
+ * com um UUID temporário único usando setPluginData()
+ *
+ * Deve ser chamado ANTES de clonar o frame!
+ * Os UUIDs são preservados durante o clone() do Figma
+ */
+export function tagNodesWithUUID(node: SceneNode): void {
+  const uuid = generateUUID();
+  node.setPluginData('temp_regen_id', uuid);
+
+  // Recursão em filhos
+  if ('children' in node) {
+    for (const child of node.children) {
+      tagNodesWithUUID(child as SceneNode);
+    }
+  }
+}
+
+/**
+ * Gera UUID simples (suficiente para IDs temporários de sessão)
+ */
+function generateUUID(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+}
+
+/**
+ * 🔒 CORREÇÃO CRÍTICA: Mapeamento por UUID (à prova de mudanças de layout)
+ *
+ * Esta função usa UUIDs temporários em vez de comparação de posição (x,y)
+ * Garante 100% de confiabilidade mesmo quando:
+ * - Auto Layout muda posições dos elementos
+ * - Textos mudam de tamanho e deslocam elementos adjacentes
+ * - Componentes são redimensionados
+ *
+ * O UUID temporário é criado antes da clonagem via tagNodesWithUUID()
+ * e é preservado durante o clone() do Figma
  */
 export function findCorrespondingNode(
   originalNode: SceneNode,
   duplicatedFrame: FrameNode
 ): SceneNode | null {
-  // Obter índice do nó original na lista de filhos do seu parent
-  const originalParent = originalNode.parent;
-  if (!originalParent || !('children' in originalParent)) {
-    console.log('⚠️ Original node has no valid parent');
-    return null;
-  }
+  // 🆕 Estratégia UUID: Primeiro tenta buscar pelo temp_regen_id
+  const originalUUID = originalNode.getPluginData('temp_regen_id');
 
-  const originalIndex = originalParent.children.indexOf(originalNode);
-  const originalName = originalNode.name;
-  const originalType = originalNode.type;
-  const originalPosition = { x: originalNode.x, y: originalNode.y };
-
-  console.log(`🔍 Searching for corresponding node:`, {
-    name: originalName,
-    type: originalType,
-    index: originalIndex,
-    position: originalPosition
+  console.log(`🔍 Searching for corresponding node using UUID strategy:`, {
+    name: originalNode.name,
+    type: originalNode.type,
+    uuid: originalUUID || 'NOT_SET'
   });
 
   /**
-   * Busca recursiva em árvore de nós
-   * Prioriza: mesmo nome + mesma posição + mesmo tipo
+   * Busca recursiva usando UUID como chave primária
+   * Fallback para posição apenas se UUID não estiver disponível (compatibilidade com código antigo)
    */
   const searchInChildren = (
     parent: BaseNode & ChildrenMixin,
     depth: number = 0
   ): SceneNode | null => {
     const indent = '  '.repeat(depth);
-    
+
     for (let i = 0; i < parent.children.length; i++) {
       const child = parent.children[i];
-      
-      // Critério 1: Mesmo nome
-      if (child.name === originalName) {
-        // Critério 2: Mesmo tipo
-        if (child.type === originalType) {
-          // Critério 3: Mesma posição (com tolerância de 1px para arredondamento)
+
+      // 🆕 CRITÉRIO PRIMÁRIO: Comparar UUID temporário
+      if (originalUUID) {
+        const childUUID = child.getPluginData('temp_regen_id');
+        if (childUUID === originalUUID) {
+          console.log(`${indent}✅ UUID MATCH at depth ${depth}:`, {
+            name: child.name,
+            type: child.type,
+            uuid: childUUID
+          });
+          return child as SceneNode;
+        }
+      } else {
+        // Fallback: Lógica antiga (posição) para compatibilidade retroativa
+        const originalName = originalNode.name;
+        const originalType = originalNode.type;
+        const originalPosition = { x: originalNode.x, y: originalNode.y };
+
+        if (child.name === originalName && child.type === originalType) {
           const childPos = { x: child.x, y: child.y };
-          const posMatch = 
-            Math.abs(originalPosition.x - childPos.x) < 1 && 
+          const posMatch =
+            Math.abs(originalPosition.x - childPos.x) < 1 &&
             Math.abs(originalPosition.y - childPos.y) < 1;
-          
+
           if (posMatch) {
-            console.log(`${indent}✅ Found exact match at depth ${depth}:`, {
+            console.log(`${indent}⚠️ Position-based match (UUID not available):`, {
               name: child.name,
               type: child.type,
               position: childPos
             });
             return child as SceneNode;
-          } else {
-            console.log(`${indent}⚠️ Name and type match but position differs:`, {
-              expected: originalPosition,
-              actual: childPos,
-              diff: {
-                x: Math.abs(originalPosition.x - childPos.x),
-                y: Math.abs(originalPosition.y - childPos.y)
-              }
-            });
           }
         }
       }
-      
+
       // Busca recursiva em filhos
       if ('children' in child) {
         const found = searchInChildren(child as BaseNode & ChildrenMixin, depth + 1);
         if (found) return found;
       }
     }
-    
+
     return null;
   };
 
   const result = searchInChildren(duplicatedFrame);
-  
+
   if (!result) {
     console.log('❌ Could not find corresponding node in duplicated frame');
   }
-  
+
   return result;
 }
 
@@ -100,8 +130,12 @@ export function findCorrespondingNode(
  */
 export function duplicateFrameWithDogoNaming(originalFrame: FrameNode): FrameNode {
   console.log(`🎯 Duplicating frame: ${originalFrame.name}`);
-  
-  // 1. Clonar o frame
+
+  // 🆕 CORREÇÃO CRÍTICA: Marcar todos os nós com UUID ANTES de clonar
+  console.log(`🏷️ Tagging all nodes with UUID before cloning...`);
+  tagNodesWithUUID(originalFrame);
+
+  // 1. Clonar o frame (UUIDs são preservados)
   const duplicatedFrame = originalFrame.clone() as FrameNode;
   
   // 2. Posicionar ao lado do original (50px de distância)

@@ -2,6 +2,12 @@
 
 import { ImageGenerationService } from '../services/imageGenerationService';
 import { NamingUtils } from '../utils/namingConvention';
+import { getBackendBaseUrl } from '../services/backendClient';
+import { tagNodesWithUUID } from '../utils/figmaUtils';
+
+// Storage keys
+const API_KEY_STORAGE_KEY = 'figma-ai-assistant-api-key';
+const IMAGE_BANK_FOLDER_STORAGE_KEY = 'figma-ai-assistant-image-bank-folder';
 
 /**
  * Retorna a data atual no formato MmmDD (ex: Nov10)
@@ -33,7 +39,81 @@ function generateAIVariant(): string {
 }
 
 export class ImageGenerationHandler {
-  
+
+  /**
+   * 🔒 CORREÇÃO CRÍTICA: Auto-Save centralizado no Handler
+   * Esta função faz upload automático para o Google Drive após gerar a imagem
+   * NÃO depende da UI estar aberta ou do usuário ter checkbox marcado
+   * A configuração é lida diretamente do clientStorage
+   */
+  private static async uploadToDriveBackground(
+    prompt: string,
+    imageBytes: Uint8Array
+  ): Promise<void> {
+    try {
+      // 1. Verificar configurações do Drive
+      const tokens = await figma.clientStorage.getAsync('google_drive_tokens');
+      const imageBankFolder = await figma.clientStorage.getAsync(IMAGE_BANK_FOLDER_STORAGE_KEY);
+      const apiKey = await figma.clientStorage.getAsync(API_KEY_STORAGE_KEY);
+      const autoSaveEnabled = await figma.clientStorage.getAsync('auto_save_drive_enabled');
+
+      // Se auto-save não estiver habilitado ou não houver tokens, sair silenciosamente
+      if (!autoSaveEnabled || !tokens || !imageBankFolder) {
+        console.log('⏭️ Auto-save skipped: not configured or disabled');
+        return;
+      }
+
+      console.log('☁️ Starting background auto-upload to Google Drive...');
+
+      const backendUrl = getBackendBaseUrl();
+      const imageBase64 = figma.base64Encode(imageBytes);
+
+      // 2. Chamar backend para gerar nome AI + upload
+      const response = await fetch(`${backendUrl}/drive/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tokens,
+          folderId: imageBankFolder,
+          fileName: 'temp.png', // Será substituído pelo nome AI
+          prompt: prompt, // Backend gera nome AI baseado nisso
+          imageBase64: imageBase64,
+          apiKey: apiKey || undefined
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log(`✅ Auto-upload successful: ${data.aiGeneratedName || data.fileName}`);
+        figma.notify(`☁️ Saved to Drive: ${data.aiGeneratedName || data.fileName}`, { timeout: 3000 });
+
+        // Notificar UI (se estiver aberta) com sucesso
+        figma.ui.postMessage({
+          type: 'auto-upload-success',
+          fileName: data.aiGeneratedName || data.fileName,
+          fileUrl: data.webViewLink
+        });
+      } else {
+        throw new Error(data.error || 'Upload failed');
+      }
+
+    } catch (error) {
+      console.error('❌ Auto-upload error:', error);
+
+      // Notificar erro, mas NÃO bloquear o fluxo principal
+      figma.notify('⚠️ Failed to auto-save to Drive. Image created in Figma.', {
+        error: true,
+        timeout: 3000
+      });
+
+      figma.ui.postMessage({
+        type: 'auto-upload-error',
+        message: error instanceof Error ? error.message : 'Upload failed'
+      });
+    }
+  }
+
   // Handler principal para geração de nova imagem
   static async handleGenerateNewImage(msg: any) {
     const startTime = Date.now();
@@ -89,7 +169,11 @@ export class ImageGenerationHandler {
           });
           
           console.log(`🎯 Duplicating frame: ${originalFrame.name}`);
-          
+
+          // 🆕 CORREÇÃO CRÍTICA: Tag com UUID antes de clonar
+          console.log(`🏷️ Tagging frame nodes with UUID...`);
+          tagNodesWithUUID(originalFrame);
+
           // Duplicar o frame
           targetFrame = originalFrame.clone() as FrameNode;
           
@@ -225,12 +309,18 @@ export class ImageGenerationHandler {
       console.log(`⏱️ [${Date.now() - startTime}ms] Step 3: Creating image in Figma...`);
       
       await ImageGenerationService.createImageInFigma(
-        imageBytes, 
-        x, 
-        y, 
+        imageBytes,
+        x,
+        y,
         `AI: ${msg.prompt.substring(0, 30)}...`,
         targetFrame
       );
+
+      // 🔒 CORREÇÃO CRÍTICA: Auto-Save ROBUSTO (não depende da UI)
+      // Dispara em background - NÃO bloqueia a resposta ao usuário
+      console.log(`⏱️ [${Date.now() - startTime}ms] Step 4: Triggering background auto-save...`);
+      this.uploadToDriveBackground(msg.prompt, imageBytes)
+        .catch(err => console.error('Background upload failed (non-blocking):', err));
 
       // Success notification
       console.log(`📨 Sending image-generation-complete with imageUrl:`, imageUrl ? `${imageUrl.substring(0, 50)}...` : 'null');
@@ -325,8 +415,12 @@ export class ImageGenerationHandler {
           totalSteps: 4
         });
         
-        // Duplicar o frame
+        // 🆕 CORREÇÃO CRÍTICA: Tag com UUID antes de clonar
         const originalFrame = duplicatedFrame;
+        console.log(`🏷️ Tagging frame nodes with UUID...`);
+        tagNodesWithUUID(originalFrame);
+
+        // Duplicar o frame
         duplicatedFrame = originalFrame.clone() as FrameNode;
         
         // Posicionar ao lado do original
@@ -510,6 +604,11 @@ export class ImageGenerationHandler {
       // Step 3: Replace image
       console.log(`⏱️ [${Date.now() - startTime}ms] Step ${totalSteps}: Replacing image...`);
       await ImageGenerationService.replaceImageInFigma(nodeToReplace, imageBytes);
+
+      // 🔒 CORREÇÃO CRÍTICA: Auto-Save ROBUSTO para substituição
+      console.log(`⏱️ [${Date.now() - startTime}ms] Triggering background auto-save for replacement...`);
+      this.uploadToDriveBackground(msg.prompt, imageBytes)
+        .catch(err => console.error('Background upload failed (non-blocking):', err));
 
       // Success notification
       figma.ui.postMessage({

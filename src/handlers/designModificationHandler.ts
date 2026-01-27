@@ -705,20 +705,48 @@ export class DesignModificationHandler {
         console.log(`🔤 [DEBUG] Original dimensions: ${originalWidth}x${originalHeight}`);
         console.log(`🔤 [DEBUG] Changing text to: "${newText}"`);
 
+        // Load all unique fonts used in the text node
+        const fontsToLoad = new Set<FontName>();
+        
+        // Check if font is mixed
+        const rawFontName = textNode.fontName;
+        if (rawFontName === figma.mixed) {
+          console.log(`⚠️ Font family is mixed, loading all segment fonts...`);
+          
+          // Load fonts for each character segment
+          const textLength = textNode.characters.length;
+          for (let i = 0; i < textLength; i++) {
+            try {
+              const charFontName = textNode.getRangeFontName(i, i + 1) as FontName;
+              if (charFontName && charFontName.family && charFontName.style) {
+                fontsToLoad.add(charFontName);
+              }
+            } catch (err) {
+              console.log(`⚠️ Could not get font for character at position ${i}`);
+            }
+          }
+          
+          // Load all unique fonts
+          for (const font of fontsToLoad) {
+            try {
+              await figma.loadFontAsync(font);
+              console.log(`✅ Loaded font: ${font.family} ${font.style}`);
+            } catch (err) {
+              console.log(`❌ Failed to load font: ${font.family} ${font.style}`, err);
+            }
+          }
+          
+          textNode.characters = newText;
+          textNode.textAlignVertical = 'CENTER';
+          return;
+        }
+        
         if (typeof textNode.fontSize !== 'number') {
           console.log(`⚠️ Font size is mixed or not a number, skipping auto-fit.`);
           const fontName = textNode.fontName as FontName;
           if (fontName && fontName.family && fontName.style) {
             await figma.loadFontAsync(fontName);
           }
-          textNode.characters = newText;
-          textNode.textAlignVertical = 'CENTER';
-          return;
-        }
-
-        const rawFontName = textNode.fontName;
-        if (rawFontName === figma.mixed) {
-          console.log(`⚠️ Font family is mixed, skipping auto-fit.`);
           textNode.characters = newText;
           textNode.textAlignVertical = 'CENTER';
           return;

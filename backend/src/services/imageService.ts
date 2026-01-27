@@ -1,8 +1,4 @@
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { Buffer } from 'node:buffer';
-import { toFile, type FileLike } from 'openai/uploads';
-import { resolveApiKey } from '../utils/apiKey';
-import { createOpenAIClient, handleOpenAIError } from './openaiClient';
 import { runwareService } from './runwareService';
 import axios from 'axios';
 
@@ -110,65 +106,19 @@ export async function analyzeImagePrompt(
   imageBase64: string,
   apiKey?: string
 ): Promise<string> {
-  const key = resolveApiKey(apiKey);
-  const systemPrompt = `You are an expert image analyst. Analyze the provided image and create a detailed, creative prompt that could be used to regenerate a similar image using DALL-E.
-
-Focus on:
-- Main subject and composition
-- Art style and visual aesthetic
-- Colors and lighting
-- Mood and atmosphere
-- Important details and elements
-
-Return a single, well-crafted prompt (not JSON) that captures the essence of the image for regeneration.`;
-
-  const client = createOpenAIClient(key);
-
-  const messages: ChatCompletionMessageParam[] = [
-    {
-      role: 'system',
-      content: [
-        {
-          type: 'text',
-          text: systemPrompt,
-        },
-      ],
-    },
-    {
-      role: 'user',
-      content: [
-        {
-          type: 'text',
-          text: 'Analyze this image and create a detailed prompt for regenerating a similar image:',
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: `data:image/png;base64,${imageBase64}`,
-          },
-        },
-      ],
-    },
-  ];
-
   try {
-    const response = (await client.chat.completions.create({
-      model: 'gpt-4o',
-      messages,
-      max_tokens: 500,
-    })) as ChatCompletionResponse;
-    const prompt = response.choices?.[0]?.message?.content?.trim();
+    console.log('🔍 Analyzing image via Runware Vision...');
+    const description = await runwareService.requestImageToText(imageBase64, apiKey);
 
-    if (!prompt) {
-      throw new Error('Falha ao gerar prompt da análise da imagem');
+    if (!description) {
+      throw new Error('Runware did not return a description for the image.');
     }
 
-    return prompt;
+    return description;
   } catch (error) {
-    handleOpenAIError(error);
+    console.error('Runware analysis error:', error);
+    throw new Error('Failed to analyze image using Runware.');
   }
-
-  throw new Error('Unhandled OpenAI error during image analysis.');
 }
 
 export async function regenerateImage({
@@ -179,16 +129,15 @@ export async function regenerateImage({
   runwareApiKey,
   model,
 }: ImageRegenerationInput): Promise<ImageRegenerationOutput> {
-  const key = resolveApiKey(apiKey);
   const promptToUse = prompt && prompt.trim().length > 0
     ? prompt
-    : await analyzeImagePrompt(imageBase64, key);
+    : await analyzeImagePrompt(imageBase64, runwareApiKey);
 
   const { base64 } = await generateImage({
     prompt: promptToUse,
     size,
     transparent: false,
-    apiKey: key,
+    apiKey,
     runwareApiKey,
     model,
   });
@@ -207,14 +156,18 @@ export async function editImage({
   nodeName,
   model,
 }: ImageEditInput): Promise<ImageEditOutput> {
-  // For now, Runware might not have a direct 'edit' like OpenAI's mask-based edit in the SDK easily
-  // If the requirement is "exclusively part of generation and editing", and Runware supports img2img
-  // we should use that. For simplicity and following the prompt "Refactor generateImage to use runware.requestImages"
-  // and "For video, use runware.videoInference", I will focus on those.
-  // If editing is also mandatory for Runware, I'll use requestImages with an input image if available.
-
   try {
-    const images = await runwareService.generateImage(prompt, size ?? '1024x1024', model, runwareApiKey); // Simplified for now
+    console.log(`🖌️ Editing image via Runware Image-to-Image. Prompt: ${prompt.substring(0, 50)}...`);
+
+    // Using generateImage with inputImage for Image-to-Image flow
+    const images = await runwareService.generateImage(
+      prompt,
+      size ?? '1024x1024',
+      model,
+      runwareApiKey,
+      imageBase64
+    );
+
     const image = Array.isArray(images) ? images[0] : undefined;
 
     if (!image || !image.imageURL) {
@@ -252,43 +205,4 @@ export async function generateVideo({
   }
 }
 
-async function createImageFile(imageBase64: string): Promise<FileLike> {
-  const base64Payload = imageBase64.includes(',')
-    ? imageBase64.split(',')[1] ?? ''
-    : imageBase64;
-  const sanitizedBase64 = base64Payload.trim().replace(/\s+/g, '');
-  const buffer = Buffer.from(sanitizedBase64, 'base64');
-
-  if (buffer.length === 0) {
-    throw new Error('Imagem vazia fornecida para edição.');
-  }
-
-  const mime = detectMime(buffer);
-  if (!mime) {
-    throw new Error('Formato de imagem não suportado. Envie PNG, JPEG ou WEBP.');
-  }
-
-  const extension = mime.split('/')[1];
-  return toFile(buffer, `image.${extension}`, { type: mime });
-}
-
-function detectMime(buffer: Buffer): 'image/png' | 'image/jpeg' | 'image/webp' | null {
-  const pngSignature = Buffer.from('89504e470d0a1a0a', 'hex');
-  if (buffer.slice(0, 8).equals(pngSignature)) {
-    return 'image/png';
-  }
-
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-    return 'image/jpeg';
-  }
-
-  if (
-    buffer.length >= 12 &&
-    buffer.slice(0, 4).toString('ascii') === 'RIFF' &&
-    buffer.slice(8, 12).toString('ascii') === 'WEBP'
-  ) {
-    return 'image/webp';
-  }
-
-  return null;
-}
+// detectMime and createImageFile removed as they were OpenAI specific

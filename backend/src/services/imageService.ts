@@ -159,11 +159,15 @@ export async function editImage({
   try {
     console.log(`🖌️ Editing image via Runware Image-to-Image. Prompt: ${prompt.substring(0, 50)}...`);
 
+    // FIX: Nano Banana (google:4@2) uses referenceImages instead of seedImage.
+    // The runwareService now handles this automatically based on the model.
+    const modelToUse = model || "google:4@2";
+
     // Using generateImage with inputImage for Image-to-Image flow
     const images = await runwareService.generateImage(
       prompt,
       size ?? '1024x1024',
-      model,
+      modelToUse,
       runwareApiKey,
       imageBase64
     );

@@ -226,16 +226,18 @@ export class ImageGenerationService {
     x = 0,
     y = 0,
     name = 'AI Generated Image',
-    targetFrame: FrameNode | null = null
+    targetFrame: FrameNode | null = null,
+    width = 512,
+    height = 512
   ): Promise<RectangleNode | null> {
-    console.log(`🎨 [FIGMA-CREATE] Creating image in Figma at position (${x}, ${y})`);
+    console.log(`🎨 [FIGMA-CREATE] Creating image in Figma at position (${x}, ${y}) with size ${width}x${height}`);
 
     try {
       const rect = figma.createRectangle();
       rect.name = name;
       rect.x = x;
       rect.y = y;
-      rect.resize(512, 512);
+      rect.resize(width, height);
 
       const image = figma.createImage(imageBytes);
       rect.fills = [

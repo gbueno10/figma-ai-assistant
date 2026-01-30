@@ -982,7 +982,8 @@ const template = `
         <div class="form-group">
           <label for="imageModel">Model:</label>
           <select id="imageModel">
-            <option value="google:4@2">Nano Banana 2</option>
+            <option value="runware:100@1">Runware Fast</option>
+            <option value="google:4@2">Nano Banana 2 (Best Quality)</option>
             <option value="openai:4@1">GPT Image 1.5</option>
           </select>
         </div>
@@ -1052,7 +1053,16 @@ const template = `
         <div class="granular-image-list" id="granularImageList">
           <!-- Image cards will be dynamically inserted here -->
         </div>
-        
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label for="granularImageModel">Model:</label>
+          <select id="granularImageModel">
+            <option value="runware:100@1">Runware Fast</option>
+            <option value="google:4@2">Nano Banana 2 (Best Quality)</option>
+            <option value="openai:4@1">GPT Image 1.5</option>
+          </select>
+        </div>
+
         <div class="granular-actions">
           <button type="button" id="executeGranularEditBtn" disabled>
             🚀 Generate All Images
@@ -1714,6 +1724,7 @@ function initGranularEditing(): void {
     }
 
     const apiKey = getElement<HTMLInputElement>('apiKey').value.trim();
+    const model = getElement<HTMLSelectElement>('granularImageModel').value;
 
     if (!apiKey) {
       console.log('⚠️ No API key provided; relying on backend configuration.');
@@ -1729,7 +1740,7 @@ function initGranularEditing(): void {
       prompt: img.customPrompt.trim()
     }));
 
-    console.log(`🎯 Executing granular edit with ${tasks.length} task(s)`);
+    console.log(`🎯 Executing granular edit with ${tasks.length} task(s) using model: ${model}`);
 
     // Show loading state
     listContainer.style.display = 'none';
@@ -1746,7 +1757,8 @@ function initGranularEditing(): void {
       type: 'granular-image-edit',
       tasks,
       apiKey,
-      size: '1024x1024'
+      size: '1024x1024',
+      model
     });
   });
 

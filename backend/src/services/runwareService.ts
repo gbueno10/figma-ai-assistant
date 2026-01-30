@@ -60,17 +60,32 @@ export class RunwareService {
         // Ensure connection is established before making requests
         await client.ensureConnection();
 
-        const images = await client.requestImages({
+        const requestParams: any = {
             positivePrompt: prompt,
             model: selectedModel,
             numberResults: 1,
             width: width || 1024,
             height: height || 1024,
-            // seedImage is the parameter for Image-to-Image in Runware
-            seedImage: inputImage,
-            // If we have an input image, we usually want some strength
-            strength: inputImage ? 0.75 : undefined,
-        });
+        };
+
+        // Add image input parameters based on the model type
+        if (inputImage) {
+            // Convert base64 to data URI format that Runware expects
+            const dataUri = inputImage.startsWith('data:')
+                ? inputImage
+                : `data:image/png;base64,${inputImage}`;
+
+            // Nano Banana (google:4@2) uses referenceImages instead of seedImage
+            if (selectedModel === "google:4@2") {
+                requestParams.referenceImages = [dataUri];
+            } else {
+                // Other models (RealVis, runware:100@1, SDXL) use seedImage
+                requestParams.seedImage = dataUri;
+                requestParams.strength = 0.75; // Default strength for img2img
+            }
+        }
+
+        const images = await client.requestImages(requestParams);
 
         return images;
     }

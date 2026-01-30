@@ -138,6 +138,10 @@ export class ImageGenerationHandler {
       console.log(`📝 Prompt: "${msg.prompt}"`);
       console.log(`📐 Size: ${msg.size || '1024x1024'}`);
 
+      // Parse image size
+      const imageSize = msg.size || '1024x1024';
+      const [imageWidth, imageHeight] = imageSize.split('x').map(Number);
+
       // Progress update
       figma.ui.postMessage({
         type: 'image-progress',
@@ -148,7 +152,7 @@ export class ImageGenerationHandler {
 
       // Step 1: Duplicate frame if selected
       console.log(`⏱️ [${Date.now() - startTime}ms] Step 1: Preparing frame for new image...`);
-      
+
       let targetFrame: FrameNode | null = null;
       let x = 0;
       let y = 0;
@@ -237,13 +241,13 @@ export class ImageGenerationHandler {
           }
           
           // Posicionar imagem no centro do frame duplicado
-          x = (targetFrame.width - 512) / 2;
-          y = (targetFrame.height - 512) / 2;
-          
+          x = (targetFrame.width - imageWidth) / 2;
+          y = (targetFrame.height - imageHeight) / 2;
+
           // Selecionar o frame duplicado
           figma.currentPage.selection = [targetFrame];
-          
-          console.log(`✅ Frame duplicated. Image will be created at (${x}, ${y})`);
+
+          console.log(`✅ Frame duplicated. Image (${imageWidth}x${imageHeight}) will be created at (${x}, ${y})`);
         } else {
           // Se não é frame, posicionar ao lado
           x = selection.x + selection.width + 50;
@@ -252,8 +256,8 @@ export class ImageGenerationHandler {
         }
       } else {
         // Sem seleção, usar centro da viewport
-        x = figma.viewport.center.x - 256;
-        y = figma.viewport.center.y - 256;
+        x = figma.viewport.center.x - (imageWidth / 2);
+        y = figma.viewport.center.y - (imageHeight / 2);
         console.log(`📍 Creating image at viewport center`);
       }
 
@@ -307,13 +311,15 @@ export class ImageGenerationHandler {
       
       // Step 3: Create image in Figma
       console.log(`⏱️ [${Date.now() - startTime}ms] Step 3: Creating image in Figma...`);
-      
+
       await ImageGenerationService.createImageInFigma(
         imageBytes,
         x,
         y,
         `AI: ${msg.prompt.substring(0, 30)}...`,
-        targetFrame
+        targetFrame,
+        imageWidth,
+        imageHeight
       );
 
       // 🔒 CORREÇÃO CRÍTICA: Auto-Save ROBUSTO (não depende da UI)

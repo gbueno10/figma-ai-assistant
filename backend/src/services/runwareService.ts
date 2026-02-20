@@ -85,25 +85,77 @@ export class RunwareService {
             }
         }
 
-        const images = await client.requestImages(requestParams);
+        // Retry logic with timeout handling
+        const maxRetries = 3;
+        const timeout = 120000; // 120 seconds (2 minutes)
+        let lastError: Error | null = null;
 
-        return images;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const images = await this.executeWithTimeout(
+                    client.requestImages(requestParams),
+                    timeout,
+                    `Runware request timed out after ${timeout}ms`
+                );
+                return images;
+            } catch (error) {
+                lastError = error as Error;
+                console.error(`Attempt ${attempt}/${maxRetries} failed:`, error instanceof Error ? error.message : error);
+
+                if (attempt < maxRetries) {
+                    // Exponential backoff: 2s, 4s, 8s
+                    const delay = Math.pow(2, attempt) * 1000;
+                    console.log(`⏳ Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+
+                    // Re-establish connection before retry
+                    await client.ensureConnection();
+                }
+            }
+        }
+
+        throw lastError || new Error('Failed to generate image after retries');
+    }
+
+    /**
+     * Wraps a promise with a timeout.
+     * @param promise The promise to wrap
+     * @param ms Timeout in milliseconds
+     * @param timeoutMessage Error message for timeout
+     * @returns The promise result or throws on timeout
+     */
+    private executeWithTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> {
+        return Promise.race([
+            promise,
+            new Promise<T>((_, reject) =>
+                setTimeout(() => reject(new Error(timeoutMessage)), ms)
+            )
+        ]);
     }
 
     /**
      * Analyzes an image and returns a text description.
      * @param imageBase64 The base64 encoded image
      * @param runwareApiKey Optional overriding API key
+     * @param model Optional model to use for image-to-text
      * @returns Description text
      */
-    public async requestImageToText(imageBase64: string, runwareApiKey?: string): Promise<string> {
+    public async requestImageToText(imageBase64: string, runwareApiKey?: string, model?: string): Promise<string> {
         const client = this.getClient(runwareApiKey);
 
         await client.ensureConnection();
 
-        const response = await client.requestImageToText({
+        const requestParams: any = {
             inputImage: imageBase64,
-        });
+        };
+
+        // Add model if specified
+        if (model) {
+            requestParams.model = model;
+            console.log(`🔍 Using model: ${model} for image-to-text`);
+        }
+
+        const response = await client.requestImageToText(requestParams);
 
         return response.text || "";
     }

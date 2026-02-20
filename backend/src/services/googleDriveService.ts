@@ -206,4 +206,39 @@ export class GoogleDriveService {
       throw wrappedError;
     }
   }
+
+  /**
+   * Get thumbnail for a Google Drive file as Base64
+   */
+  async getThumbnailBase64(accessToken: string, fileId: string): Promise<string> {
+    try {
+      this.oauth2Client.setCredentials({ access_token: accessToken });
+      const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+
+      // Get metadata to find the thumbnail link
+      const file = await drive.files.get({
+        fileId,
+        fields: 'thumbnailLink',
+        supportsAllDrives: true,
+      });
+
+      const thumbnailLink = file.data.thumbnailLink;
+      if (!thumbnailLink) {
+        throw new Error('No thumbnail available for this file');
+      }
+
+      // Fetch the thumbnail using the OAuth2 client to handle authentication if needed
+      // (although thumbnailLink is usually public for a short time)
+      const response = await this.oauth2Client.request({
+        url: thumbnailLink,
+        responseType: 'arraybuffer',
+      });
+
+      const buffer = Buffer.from(response.data as any);
+      return buffer.toString('base64');
+    } catch (error) {
+      console.error('Error getting thumbnail:', error);
+      throw error;
+    }
+  }
 }

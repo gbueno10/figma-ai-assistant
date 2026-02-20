@@ -47,18 +47,19 @@ router.post('/generate', async (req, res, next) => {
 
 router.post('/analyze', async (req, res, next) => {
   try {
-    const { imageBase64, apiKey } = req.body ?? {};
+    const { imageBase64, apiKey, model } = req.body ?? {};
 
     console.log('[Images][analyze] Incoming request', {
       imageLength: typeof imageBase64 === 'string' ? imageBase64.length : 'invalid',
       providedApiKey: Boolean(apiKey),
+      model: model || 'default',
     });
 
     if (!imageBase64 || typeof imageBase64 !== 'string') {
       return res.status(400).json({ error: 'Field "imageBase64" is required and must be a base64 string.' });
     }
 
-    const prompt = await analyzeImagePrompt(imageBase64, apiKey);
+    const prompt = await analyzeImagePrompt(imageBase64, apiKey, model);
     console.log('[Images][analyze] Completed', {
       promptLength: prompt.length,
     });

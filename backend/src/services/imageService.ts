@@ -104,11 +104,12 @@ export async function generateImage({
 
 export async function analyzeImagePrompt(
   imageBase64: string,
-  apiKey?: string
+  apiKey?: string,
+  model?: string
 ): Promise<string> {
   try {
     console.log('🔍 Analyzing image via Runware Vision...');
-    const description = await runwareService.requestImageToText(imageBase64, apiKey);
+    const description = await runwareService.requestImageToText(imageBase64, apiKey, model);
 
     if (!description) {
       throw new Error('Runware did not return a description for the image.');
@@ -131,7 +132,7 @@ export async function regenerateImage({
 }: ImageRegenerationInput): Promise<ImageRegenerationOutput> {
   const promptToUse = prompt && prompt.trim().length > 0
     ? prompt
-    : await analyzeImagePrompt(imageBase64, runwareApiKey);
+    : await analyzeImagePrompt(imageBase64, runwareApiKey, model);
 
   const { base64 } = await generateImage({
     prompt: promptToUse,
@@ -156,8 +157,10 @@ export async function editImage({
   nodeName,
   model,
 }: ImageEditInput): Promise<ImageEditOutput> {
+  const context = nodeName ? `[${nodeName}]` : imageIndex !== undefined ? `[Image ${imageIndex}/${totalImages}]` : '';
+
   try {
-    console.log(`🖌️ Editing image via Runware Image-to-Image. Prompt: ${prompt.substring(0, 50)}...`);
+    console.log(`🖌️ ${context} Editing image via Runware Image-to-Image. Prompt: ${prompt.substring(0, 50)}...`);
 
     // FIX: Nano Banana (google:4@2) uses referenceImages instead of seedImage.
     // The runwareService now handles this automatically based on the model.
@@ -181,10 +184,12 @@ export async function editImage({
     const response = await axios.get(image.imageURL, { responseType: 'arraybuffer' });
     const base64 = Buffer.from(response.data as any, 'binary').toString('base64');
 
+    console.log(`✅ ${context} Image edit completed successfully`);
     return { base64 };
   } catch (error) {
-    console.error('Runware edit error:', error);
-    throw new Error('Failed to edit image using Runware.');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`❌ ${context} Runware edit error:`, errorMessage);
+    throw new Error(`Failed to edit image ${context}: ${errorMessage}`);
   }
 }
 

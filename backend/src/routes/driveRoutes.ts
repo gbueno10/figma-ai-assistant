@@ -518,4 +518,45 @@ router.get('/image/:fileId', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/drive/thumbnail/:fileId
+ * Get thumbnail as image binary
+ * Returns: image/jpeg or image/png
+ */
+router.get('/thumbnail/:fileId', async (req: Request, res: Response) => {
+  try {
+    const fileId = req.params.fileId;
+    let tokens: any = req.body.tokens;
+
+    if (!tokens && typeof req.query.tokens === 'string') {
+      try {
+        tokens = JSON.parse(req.query.tokens);
+      } catch (parseError) {
+        return res.status(400).json({ error: 'Invalid tokens payload' });
+      }
+    }
+
+    if (!fileId) {
+      return res.status(400).json({ error: 'Missing fileId parameter' });
+    }
+
+    if (!tokens || !tokens.access_token) {
+      return res.status(400).json({ error: 'Missing access token' });
+    }
+
+    const base64 = await driveService.getThumbnailBase64(tokens.access_token, fileId);
+    const buffer = Buffer.from(base64, 'base64');
+
+    res.setHeader('Content-Type', 'image/jpeg'); // Google thumbnails are usually JPEGs
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error getting thumbnail route:', error);
+    res.status(500).json({
+      error: 'Failed to get thumbnail',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 export default router;

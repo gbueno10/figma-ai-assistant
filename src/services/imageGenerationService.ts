@@ -109,12 +109,13 @@ export class ImageGenerationService {
     return base64;
   }
 
-  static async analyzeImageForRegeneration(imageBytes: Uint8Array, apiKey?: string): Promise<string> {
+  static async analyzeImageForRegeneration(imageBytes: Uint8Array, apiKey?: string, model?: string): Promise<string> {
     console.log('🔍 Forwarding image analysis to backend...');
     const base64 = this.uint8ArrayToBase64(imageBytes);
     const response = await postToBackend<AnalyzeImageResponse>('/images/analyze', {
       imageBase64: base64,
       apiKey,
+      model,
     });
     console.log('✅ Backend returned regeneration prompt');
     return response.prompt;

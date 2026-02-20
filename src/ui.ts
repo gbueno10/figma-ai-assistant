@@ -2970,6 +2970,7 @@ function initImageBankBrowser(): void {
   let cachedDriveTokens: any = null;
   let backendBaseUrl = '';
   let imageBankFolderId = '';
+  let activeBlobUrls: Set<string> = new Set();
 
   function waitForPluginMessageOnce(expectedType: string, timeoutMs = 6000): Promise<PluginToUiMessage> {
     return new Promise((resolve, reject) => {
@@ -3226,6 +3227,8 @@ function initImageBankBrowser(): void {
 
   // Render image grid
   function renderImageGrid(): void {
+    // Clean up old blob URLs before clearing the container
+    revokeBlobUrls();
     imagesDiv.innerHTML = '';
 
     if (filteredImages.length === 0) {
@@ -3238,20 +3241,25 @@ function initImageBankBrowser(): void {
     gridDiv.style.display = 'block';
     countDiv.textContent = `${filteredImages.length} image(s) found`;
 
-    filteredImages.forEach(img => {
+    filteredImages.forEach(async (img) => {
       const itemDiv = document.createElement('div');
       itemDiv.className = 'image-bank-item';
       itemDiv.dataset.fileId = img.id;
       itemDiv.dataset.fileName = img.name;
 
-      // Use thumbnail or placeholder; append access_token to avoid 403 on private thumbs
+      // Use thumbnail or placeholder
       const imgElement = document.createElement('img');
-      const thumbSrc = img.thumbnailLink
-        ? appendAccessToken(img.thumbnailLink, cachedDriveTokens?.access_token)
-        : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>';
-      imgElement.src = thumbSrc;
       imgElement.alt = img.name;
       imgElement.loading = 'lazy';
+
+      // Load image through backend proxy to avoid CORS/Auth issues with Google Drive
+      if (img.id) {
+        const thumbSrc = `${backendBaseUrl}/drive/thumbnail/${img.id}?tokens=${encodeURIComponent(JSON.stringify(cachedDriveTokens))}`;
+        const blobUrl = await loadImageAsBlob(thumbSrc);
+        imgElement.src = blobUrl;
+      } else {
+        imgElement.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>';
+      }
 
       const nameDiv = document.createElement('div');
       nameDiv.className = 'image-bank-item-name';
@@ -3485,6 +3493,34 @@ function initImageBankBrowser(): void {
       return parsed.toString();
     } catch {
       return url;
+    }
+  }
+
+  // Clean up blob URLs to prevent memory leaks
+  function revokeBlobUrls(): void {
+    activeBlobUrls.forEach(url => {
+      URL.revokeObjectURL(url);
+    });
+    activeBlobUrls.clear();
+  }
+
+  // Load image from Google Drive using fetch and convert to blob URL
+  // This avoids CSP issues with direct img.src assignment
+  async function loadImageAsBlob(url: string): Promise<string> {
+    try {
+      console.log(`Loading the image '${url}'`);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to load image: ${response.status} ${response.statusText}`);
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      activeBlobUrls.add(blobUrl);
+      return blobUrl;
+    } catch (error) {
+      console.error(`Failed to load resource from ${url}`, error);
+      // Return a placeholder on error
+      return 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>';
     }
   }
 
